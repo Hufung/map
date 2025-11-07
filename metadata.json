@@ -1,0 +1,7 @@
+{
+  "name": "HKmap",
+  "description": "An interactive map of Hong Kong displaying car parks with real-time vacancy, country park attractions, viewing points, parking meters, and critical traffic features. Includes routing and live navigation alerts.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

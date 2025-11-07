@@ -1,4 +1,5 @@
-import type { GeoJSON } from 'leaflet';
+// FIX: Import 'Control' as 'LeafletControl' to resolve a name collision in the module augmentation below.
+import type { GeoJSON, Control as LeafletControl } from 'leaflet';
 
 // General Types
 export type Language = 'en_US' | 'zh_TW' | 'zh_CN';
@@ -144,3 +145,54 @@ export interface RoadNetworkProperties {
 export type RoadNetworkFeature = GeoJSON.Feature<GeoJSON.LineString | GeoJSON.MultiLineString, RoadNetworkProperties>;
 
 export type TrafficSpeedData = Map<string, number>; // segment_id -> speed
+
+// Fix: Add leaflet-routing-machine type declarations to augment the L namespace.
+// This is necessary because the default leaflet types do not include this plugin.
+declare module 'leaflet' {
+    namespace Routing {
+        interface IRoute {
+            name: string;
+            summary: {
+                totalDistance: number;
+                totalTime: number;
+            };
+            coordinates: LatLng[];
+            waypoints: LatLng[];
+            instructions: {
+                text: string;
+            }[];
+        }
+
+        interface RoutingErrorEvent extends LeafletEvent {
+            error: {
+                message: string;
+            };
+        }
+
+        interface RoutesFoundEvent extends LeafletEvent {
+            routes: IRoute[];
+            waypoints: any[];
+        }
+
+        // FIX: The class 'Control' was extending itself, causing a circular reference.
+        // It now correctly extends the aliased 'LeafletControl' to inherit from Leaflet's base Control class.
+        class Control extends LeafletControl {
+            on(type: 'routesfound', fn: (e: RoutesFoundEvent) => void, context?: any): this;
+            on(type: 'routingerror', fn: (e: RoutingErrorEvent) => void, context?: any): this;
+            on(type: string, fn: (e: any) => void, context?: any): this;
+        }
+
+        interface RoutingControlOptions {
+            waypoints: (LatLng | LatLngLiteral)[];
+            routeWhileDragging?: boolean;
+            show?: boolean;
+            addWaypoints?: boolean;
+            fitSelectedRoutes?: boolean;
+            lineOptions?: {
+                styles: any[]
+            };
+        }
+
+        function control(options: RoutingControlOptions): Control;
+    }
+}

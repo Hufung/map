@@ -477,25 +477,13 @@ const roadNetworkWorkerCode = `
         return features;
     }
     
-    async function fetchWithProxyFallback(resourceUrl, proxies) {
-        let lastError = null;
-        for (const proxy of proxies) {
-            try {
-                const proxiedUrl = proxy + resourceUrl;
-                const response = await fetch(proxiedUrl);
-                if (response.ok) return response;
-                lastError = new Error(\`Proxy \${proxy} failed with status \${response.status}\`);
-            } catch (error) {
-                lastError = error;
-            }
-        }
-        throw new Error(\`All proxies failed to fetch \${resourceUrl}. Last error: \${lastError?.message}\`);
-    }
-
     self.onmessage = async (event) => {
-        const { url, proxies } = event.data;
+        const { url } = event.data;
         try {
-            const response = await fetchWithProxyFallback(url, proxies);
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(\`Failed to fetch local GML with status \${response.status}\`);
+            }
             const gmlText = await response.text();
             if (!gmlText) throw new Error('Empty GML data received in worker.');
             
@@ -543,8 +531,11 @@ function fetchRoadNetworkFromWorker(onChunk: (chunk: RoadNetworkFeature[]) => vo
         };
 
         worker.onerror = (error) => reject(error);
-
-        worker.postMessage({ url: API_ROAD_NETWORK_URL, proxies: CORS_PROXIES });
+        
+        // FIX: Construct an absolute URL for the worker. Workers created from blobs
+        // have a null origin and cannot resolve relative paths like "/CENTERLINE.gml".
+        const absoluteUrl = new URL(API_ROAD_NETWORK_URL, window.location.origin).href;
+        worker.postMessage({ url: absoluteUrl });
     });
 }
 
@@ -636,7 +627,8 @@ export async function fetchRoadNetworkGeometry(onChunk: (chunk: RoadNetworkFeatu
         
         // Fallback for environments without Web Worker support
         console.warn("Web Workers not supported. Fetching and parsing on main thread.");
-        const response = await fetchWithProxyFallback(API_ROAD_NETWORK_URL);
+        const response = await fetch(API_ROAD_NETWORK_URL);
+        if (!response.ok) throw new Error(`Failed to fetch local GML with status ${response.status}`);
         const gmlText = await response.text();
         if (!gmlText) throw new Error('Empty GML data received for road network.');
         

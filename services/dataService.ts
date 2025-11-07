@@ -414,131 +414,6 @@ async function getCachedRoadNetwork(): Promise<RoadNetworkFeature[] | null> {
     }
 }
 
-// --- Web Worker for fetching and parsing Road Network ---
-const roadNetworkWorkerCode = `
-    const DB_NAME = 'HKMapCache';
-    const DB_VERSION = 1;
-    const ROAD_NETWORK_STORE = 'roadNetwork';
-
-    function openDb() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => resolve(request.result);
-        });
-    }
-
-    async function setCachedRoadNetwork(features) {
-        try {
-            const db = await openDb();
-            const transaction = db.transaction(ROAD_NETWORK_STORE, 'readwrite');
-            const store = transaction.objectStore(ROAD_NETWORK_STORE);
-            store.put({ timestamp: Date.now(), data: features }, 'geometry');
-        } catch (e) {
-            console.error("Worker failed to cache road network:", e);
-        }
-    }
-
-    function parseGMLtoGeoJSON(gmlText) {
-        const parser = new DOMParser();
-        const gmlDoc = parser.parseFromString(gmlText, 'application/xml');
-        const parserError = gmlDoc.querySelector('parsererror');
-        if (parserError) {
-            console.error("XML parsing error in worker:", parserError.textContent);
-            throw new Error("Failed to parse GML file in worker.");
-        }
-        const features = [];
-        const featureMembers = gmlDoc.getElementsByTagNameNS('http://www.opengis.net/gml/3.2', 'featureMember');
-        for (const member of Array.from(featureMembers)) {
-            const centerline = member.getElementsByTagNameNS('*', 'CENTERLINE')[0];
-            if (!centerline) continue;
-            const irnNode = centerline.getElementsByTagNameNS('*', 'IRN')[0];
-            const nameNode = centerline.getElementsByTagNameNS('*', 'ST_NAME_EN')[0];
-            const posListNode = centerline.getElementsByTagNameNS('http://www.opengis.net/gml/3.2', 'posList')[0];
-            const segmentId = irnNode?.textContent;
-            if (!segmentId || !posListNode?.textContent) continue;
-            const name = nameNode?.textContent || 'Unnamed Road';
-            const coordsStr = posListNode.textContent.trim().split(/\\s+/);
-            const coordinates = [];
-            for (let i = 0; i < coordsStr.length; i += 2) {
-                const lat = parseFloat(coordsStr[i]);
-                const lon = parseFloat(coordsStr[i + 1]);
-                if (!isNaN(lat) && !isNaN(lon)) {
-                    coordinates.push([lon, lat]);
-                }
-            }
-            if (coordinates.length < 2) continue;
-            features.push({
-                type: 'Feature',
-                geometry: { type: 'LineString', coordinates },
-                properties: { name, description: \`Road Segment ID: \${segmentId}\`, segment_id: segmentId },
-            });
-        }
-        return features;
-    }
-    
-    self.onmessage = async (event) => {
-        const { url } = event.data;
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(\`Failed to fetch local GML with status \${response.status}\`);
-            }
-            const gmlText = await response.text();
-            if (!gmlText) throw new Error('Empty GML data received in worker.');
-            
-            const allFeatures = parseGMLtoGeoJSON(gmlText);
-            
-            if (allFeatures.length > 0) {
-                await setCachedRoadNetwork(allFeatures);
-            }
-            
-            const chunkSize = 500;
-            for (let i = 0; i < allFeatures.length; i += chunkSize) {
-                const chunk = allFeatures.slice(i, i + chunkSize);
-                self.postMessage({ type: 'chunk', features: chunk });
-            }
-            self.postMessage({ type: 'done' });
-            
-        } catch (error) {
-            self.postMessage({ type: 'error', error: error.message });
-        }
-    };
-`;
-
-let roadNetworkWorker: Worker | null = null;
-function getRoadNetworkWorker(): Worker {
-    if (!roadNetworkWorker) {
-        const blob = new Blob([roadNetworkWorkerCode], { type: 'application/javascript' });
-        roadNetworkWorker = new Worker(URL.createObjectURL(blob));
-    }
-    return roadNetworkWorker;
-}
-
-function fetchRoadNetworkFromWorker(onChunk: (chunk: RoadNetworkFeature[]) => void): Promise<void> {
-    return new Promise((resolve, reject) => {
-        const worker = getRoadNetworkWorker();
-        
-        worker.onmessage = (event) => {
-            const { type, features, error } = event.data;
-            if (type === 'chunk') {
-                onChunk(features);
-            } else if (type === 'done') {
-                resolve();
-            } else if (type === 'error') {
-                reject(new Error(error));
-            }
-        };
-
-        worker.onerror = (error) => reject(error);
-        
-        // FIX: Construct an absolute URL for the worker. Workers created from blobs
-        // have a null origin and cannot resolve relative paths like "/CENTERLINE.gml".
-        const absoluteUrl = new URL(API_ROAD_NETWORK_URL, window.location.origin).href;
-        worker.postMessage({ url: absoluteUrl });
-    });
-}
-
 /**
  * Parses a GML string into a GeoJSON FeatureCollection format that the app can use.
  * This is specific to the CENTERLINE.gml structure.
@@ -618,30 +493,31 @@ export async function fetchRoadNetworkGeometry(onChunk: (chunk: RoadNetworkFeatu
             }
             return;
         }
-
-        if (window.Worker) {
-            console.log("Fetching road network via worker to avoid blocking UI...");
-            await fetchRoadNetworkFromWorker(onChunk);
-            return;
-        } 
         
-        // Fallback for environments without Web Worker support
-        console.warn("Web Workers not supported. Fetching and parsing on main thread.");
+        console.log("Fetching road network GML on main thread...");
         const response = await fetch(API_ROAD_NETWORK_URL);
-        if (!response.ok) throw new Error(`Failed to fetch local GML with status ${response.status}`);
+        if (!response.ok) throw new Error(`Failed to fetch GML with status ${response.status}`);
         const gmlText = await response.text();
+
         if (!gmlText) throw new Error('Empty GML data received for road network.');
         
+        console.log("Parsing road network GML on main thread...");
         const features = parseGMLtoGeoJSON(gmlText);
+        console.log(`Parsed ${features.length} road network features.`);
         
         if (features.length > 0 && window.indexedDB) {
-            const db = await getDb();
-            const transaction = db.transaction(ROAD_NETWORK_STORE, 'readwrite');
-            const store = transaction.objectStore(ROAD_NETWORK_STORE);
-            store.put({ timestamp: Date.now(), data: features }, 'geometry');
+            try {
+                const db = await getDb();
+                const transaction = db.transaction(ROAD_NETWORK_STORE, 'readwrite');
+                const store = transaction.objectStore(ROAD_NETWORK_STORE);
+                store.put({ timestamp: Date.now(), data: features }, 'geometry');
+                console.log("Cached road network geometry in IndexedDB.");
+            } catch (dbError) {
+                console.error("Failed to cache road network geometry:", dbError);
+            }
         }
 
-        // Stream data in chunks in the fallback path as well
+        // Stream data in chunks to the component to allow for progressive rendering
         const chunkSize = 1000;
         for (let i = 0; i < features.length; i += chunkSize) {
             const chunk = features.slice(i, i + chunkSize);

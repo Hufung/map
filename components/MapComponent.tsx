@@ -242,7 +242,8 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             setLocalTrafficFeatures(features);
         });
         
-        map.on('popupopen', (e) => {
+        // FIX: Explicitly type the event object 'e' as L.PopupEvent to fix untyped querySelector call.
+        map.on('popupopen', (e: L.PopupEvent) => {
             const navBtn = e.popup.getElement()?.querySelector<HTMLButtonElement>('.navigate-btn');
             if(navBtn?.dataset.lat && navBtn?.dataset.lon) {
                 navBtn.onclick = () => handleNavigation(parseFloat(navBtn.dataset.lat!), parseFloat(navBtn.dataset.lon!));

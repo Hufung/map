@@ -1,5 +1,8 @@
+// FIX: Add a non-type-only import to ensure the 'leaflet' module can be found for augmentation.
+import 'leaflet';
 // FIX: Import 'Control' as 'LeafletControl' to resolve a name collision in the module augmentation below.
-import type { GeoJSON, Control as LeafletControl } from 'leaflet';
+// FIX: Add LatLng, LatLngLiteral, and LeafletEvent to resolve type errors in module augmentation.
+import type { GeoJSON, Control as LeafletControl, LatLng, LatLngLiteral, LeafletEvent } from 'leaflet';
 
 // General Types
 export type Language = 'en_US' | 'zh_TW' | 'zh_CN';

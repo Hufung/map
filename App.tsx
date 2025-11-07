@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Map as LeafletMap } from 'leaflet';
 import type { 
@@ -9,6 +8,7 @@ import type {
     PermitFeature,
     ProhibitionFeature,
     RoadNetworkFeature,
+    TrafficSpeedInfo,
     Language,
     VisibleLayers
 } from './types';
@@ -20,8 +20,8 @@ import {
     fetchTurnRestrictionsData,
     fetchPermitData,
     fetchProhibitionData,
-    fetchRoadNetworkGeometry,
-    fetchTrafficSpeedData
+    fetchRoadNetworkData,
+    fetchTrafficSpeedData,
 } from './services/dataService';
 
 import { MapComponent } from './components/MapComponent';
@@ -34,20 +34,16 @@ import { Legend } from './components/Legend';
 const App: React.FC = () => {
     const [map, setMap] = useState<LeafletMap | null>(null);
     const [language, setLanguage] = useState<Language>('en_US');
-    const [isLoading, setIsLoading] = useState<boolean>(false); // Changed: Prioritize map load, no initial spinner.
+    const [isLoading, setIsLoading] = useState<boolean>(true);
     const [carparkData, setCarparkData] = useState<Carpark[]>([]);
     const [attractionsData, setAttractionsData] = useState<AttractionFeature[]>([]);
     const [viewingPointsData, setViewingPointsData] = useState<ViewingPointFeature[]>([]);
     const [turnRestrictionsData, setTurnRestrictionsData] = useState<TurnRestrictionFeature[]>([]);
     const [permitData, setPermitData] = useState<PermitFeature[]>([]);
     const [prohibitionData, setProhibitionData] = useState<ProhibitionFeature[]>([]);
-    const [roadNetworkGeometry, setRoadNetworkGeometry] = useState<RoadNetworkFeature[]>([]);
-    const [trafficSpeedData, setTrafficSpeedData] = useState<Map<string, number>>(new Map());
+    const [roadNetworkData, setRoadNetworkData] = useState<RoadNetworkFeature[]>([]);
+    const [trafficSpeedData, setTrafficSpeedData] = useState<TrafficSpeedInfo>({});
     const [navigationTarget, setNavigationTarget] = useState<{lat: number, lon: number} | null>(null);
-    const [dataCache, setDataCache] = useState({ attractions: false, viewingPoints: false });
-    const [trafficLayerError, setTrafficLayerError] = useState<boolean>(false);
-    const [isTrafficLayerLoading, setIsTrafficLayerLoading] = useState<boolean>(false);
-
 
     const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
         carparks: true,
@@ -67,125 +63,61 @@ const App: React.FC = () => {
     };
 
     const loadInitialData = useCallback(async () => {
-        // Load essential data in the background without a full-screen spinner on first load.
-        // The spinner will still be used for language changes.
+        setIsLoading(true);
         try {
             const [
                 carparks,
+                attractions, 
+                viewingPoints,
+                turnRestrictions,
                 permits,
                 prohibitions,
-                trafficSpeed
+                roadNetwork,
+                trafficSpeeds
             ] = await Promise.all([
                 fetchCarparkData(language),
+                fetchAttractionsData(),
+                fetchViewingPointsData(),
+                fetchTurnRestrictionsData(),
                 fetchPermitData(),
                 fetchProhibitionData(),
+                fetchRoadNetworkData(),
                 fetchTrafficSpeedData(),
-                fetchInitialParkingMeterStatus()
+                fetchInitialParkingMeterStatus() // Fetches and caches status
             ]);
 
             setCarparkData(carparks);
+            setAttractionsData(attractions);
+            setViewingPointsData(viewingPoints);
+            setTurnRestrictionsData(turnRestrictions);
             setPermitData(permits);
             setProhibitionData(prohibitions);
-            setTrafficSpeedData(trafficSpeed);
+            setRoadNetworkData(roadNetwork);
+            setTrafficSpeedData(trafficSpeeds);
             
         } catch (error) {
-            console.error("Failed to load essential initial data:", error);
-        }
-
-        // Load fallible data (KMZ via CORS) separately
-        try {
-            const turnRestrictions = await fetchTurnRestrictionsData();
-            setTurnRestrictionsData(turnRestrictions);
-        } catch (error) {
-            console.error("Could not load Turn Restrictions, layer will be empty.", error);
-        }
-        
-        setIsLoading(false); // Stops spinner after a language change. No-op on initial load.
-    }, [language]);
-
-
-    const loadRoadNetwork = useCallback(async () => {
-        // Prevent re-fetching if already loaded or currently loading
-        if (roadNetworkGeometry.length > 0 || isTrafficLayerLoading) return;
-    
-        setIsTrafficLayerLoading(true);
-        setTrafficLayerError(false);
-        setRoadNetworkGeometry([]); // Clear previous data on retry
-    
-        try {
-            // fetchRoadNetworkGeometry now accepts a callback to stream chunks of data
-            await fetchRoadNetworkGeometry((chunk) => {
-                setRoadNetworkGeometry(prev => [...prev, ...chunk]);
-            });
-        } catch (error) {
-            console.error("Failed to load road network geometry:", error);
-            setTrafficLayerError(true);
-            setRoadNetworkGeometry([]); // Clear any partial data on error
+            console.error("Failed to load initial data:", error);
         } finally {
-            setIsTrafficLayerLoading(false);
+            setIsLoading(false);
         }
-    }, [roadNetworkGeometry.length, isTrafficLayerLoading]);
-    
-    const retryLoadRoadNetwork = useCallback(() => {
-        loadRoadNetwork();
-    }, [loadRoadNetwork]);
-
+    }, [language]);
 
     useEffect(() => {
         loadInitialData();
     }, [loadInitialData]);
-
-    // Fetch traffic speed data every minute
+    
     useEffect(() => {
         const intervalId = setInterval(async () => {
             try {
-                const speedData = await fetchTrafficSpeedData();
-                setTrafficSpeedData(speedData);
+                const speeds = await fetchTrafficSpeedData();
+                setTrafficSpeedData(speeds);
             } catch (error) {
                 console.error("Failed to refresh traffic speed data:", error);
             }
-        }, 60000); // 60 seconds
+        }, 60000); // Refresh every 60 seconds
 
         return () => clearInterval(intervalId);
     }, []);
-
-    const handleVisibilityChange = async (newVisibility: VisibleLayers) => {
-        setVisibleLayers(newVisibility);
-    
-        if (newVisibility.trafficSpeed) {
-            loadRoadNetwork();
-        }
-        
-        // Lazy load attractions
-        if (newVisibility.attractions && !dataCache.attractions) {
-            setIsLoading(true);
-            try {
-                const attractions = await fetchAttractionsData();
-                setAttractionsData(attractions);
-                setDataCache(prev => ({ ...prev, attractions: true }));
-            } catch (error) {
-                console.error("Failed to lazy load attractions data:", error);
-                setVisibleLayers(prev => ({ ...prev, attractions: false })); // Revert on error
-            } finally {
-                setIsLoading(false);
-            }
-        }
-    
-        // Lazy load viewing points
-        if (newVisibility.viewingPoints && !dataCache.viewingPoints) {
-            setIsLoading(true);
-            try {
-                const viewingPoints = await fetchViewingPointsData();
-                setViewingPointsData(viewingPoints);
-                setDataCache(prev => ({ ...prev, viewingPoints: true }));
-            } catch (error) {
-                console.error("Failed to lazy load viewing points data:", error);
-                setVisibleLayers(prev => ({ ...prev, viewingPoints: false })); // Revert on error
-            } finally {
-                setIsLoading(false);
-            }
-        }
-    };
 
 
     const handleMarkerClick = useCallback((carpark: Carpark) => {
@@ -214,10 +146,7 @@ const App: React.FC = () => {
             <LayerControl
                 language={language}
                 visibleLayers={visibleLayers}
-                onVisibilityChange={handleVisibilityChange}
-                trafficLayerError={trafficLayerError}
-                onRetryLoadRoadNetwork={retryLoadRoadNetwork}
-                isTrafficLoading={isTrafficLayerLoading}
+                onVisibilityChange={setVisibleLayers}
             />
             <Legend language={language} />
             
@@ -231,14 +160,14 @@ const App: React.FC = () => {
                 turnRestrictionsData={turnRestrictionsData}
                 permitData={permitData}
                 prohibitionData={prohibitionData}
-                roadNetworkGeometry={roadNetworkGeometry}
+                roadNetworkData={roadNetworkData}
                 trafficSpeedData={trafficSpeedData}
                 onMarkerClick={handleMarkerClick}
                 navigationTarget={navigationTarget}
                 onNavigationStarted={handleNavigationStarted}
             />
             
-            {isLoading && <LoadingSpinner />}
+            {isLoading && <LoadingSpinner language={language} />}
             
             {selectedCarpark && (
                 <InfoModal

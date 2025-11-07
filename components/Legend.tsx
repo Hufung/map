@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Language } from '../types';
 import { i18n } from '../constants';
-import { CarparkSVG, AttractionSVG, ViewingPointSVG, ParkingMeterSVG, ProhibitionSVG } from './MapIcons';
+import { CarparkSVG, AttractionSVG, ViewingPointSVG, ParkingMeterSVG, PermitSVG, ProhibitionSVG } from './MapIcons';
 
 interface LegendProps {
     language: Language;
@@ -11,17 +11,6 @@ const LegendRow: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, l
     <div className="flex items-center space-x-2">
         <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">{icon}</div>
         <span className="text-xs text-gray-700">{label}</span>
-    </div>
-);
-
-const TrafficSpeedLegend: React.FC<{ t: typeof i18n['en_US'] }> = ({ t }) => (
-    <div className="border-t mt-2 pt-2">
-        <h5 className="font-bold text-xs text-gray-800 mb-1">{t.legendTrafficSpeedTitle}</h5>
-        <div className="space-y-1">
-            <LegendRow icon={<div className="w-4 h-2 bg-[#28a745] rounded-sm" />} label={t.legendTrafficFast} />
-            <LegendRow icon={<div className="w-4 h-2 bg-[#ffc107] rounded-sm" />} label={t.legendTrafficMedium} />
-            <LegendRow icon={<div className="w-4 h-2 bg-[#dc3545] rounded-sm" />} label={t.legendTrafficSlow} />
-        </div>
     </div>
 );
 
@@ -56,15 +45,18 @@ export const Legend: React.FC<LegendProps> = ({ language }) => {
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-green-500 rounded-full"><AttractionSVG/></div>} label={t.legendAttraction} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-amber-500 rounded-full p-0.5"><ViewingPointSVG/></div>} label={t.legendViewingPoint} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-purple-500 rounded-full p-0.5"><ParkingMeterSVG/></div>} label={t.legendParkingMeter} />
-                <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-orange-500 text-white font-bold rounded-full text-sm">P</div>} label={t.legendPermit} />
+                <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-orange-500 rounded-full p-0.5"><PermitSVG/></div>} label={t.legendPermit} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-red-600 rounded-full p-0.5"><ProhibitionSVG/></div>} label={t.legendProhibition} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-red-500 text-white font-bold rounded-full text-sm">&#8635;</div>} label={t.legendTurnRestriction} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-slate-600 text-white font-bold rounded-full text-xs">Z</div>} label={t.legendZebraCrossing} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-yellow-500 text-black font-bold rounded-full text-xs">Y</div>} label={t.legendYellowBox} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-cyan-500 text-white font-bold rounded-full text-xs">$</div>} label={t.legendTollPlaza} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-red-700 text-white font-bold rounded-full text-xs">C</div>} label={t.legendCulDeSac} />
+                <hr/>
+                <LegendRow icon={<div className="w-4 h-1.5 bg-[#28a745] my-2"></div>} label={t.legendTrafficSmooth} />
+                <LegendRow icon={<div className="w-4 h-1.5 bg-[#ffc107] my-2"></div>} label={t.legendTrafficSlow} />
+                <LegendRow icon={<div className="w-4 h-1.5 bg-[#dc3545] my-2"></div>} label={t.legendTrafficCongested} />
             </div>
-            <TrafficSpeedLegend t={t} />
         </div>
     );
 };

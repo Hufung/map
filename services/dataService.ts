@@ -1,3 +1,4 @@
+import L from 'leaflet';
 import type { 
     Carpark, 
     AttractionFeature, 
@@ -8,7 +9,7 @@ import type {
     PermitFeature,
     ProhibitionFeature,
     RoadNetworkFeature,
-    TrafficSpeedData,
+    TrafficSpeedInfo,
     Language 
 } from '../types';
 import { 
@@ -24,139 +25,8 @@ import {
     API_PROHIBITION_PC_URL,
     API_PROHIBITION_ALL_URL,
     API_ROAD_NETWORK_URL,
-    API_TRAFFIC_SPEED_URL,
-    CORS_PROXIES
+    API_TRAFFIC_SPEED_URL
 } from '../constants';
-import type { GeoJSON } from 'leaflet';
-// FIX: Import Leaflet type definitions for L namespace.
-import type L from 'leaflet';
-
-// --- Resilient Fetching for CORS-protected resources ---
-async function fetchWithProxyFallback(resourceUrl: string): Promise<Response> {
-    let lastError: Error | null = null;
-    for (const proxy of CORS_PROXIES) {
-        try {
-            const proxiedUrl = proxy + resourceUrl;
-            const response = await fetch(proxiedUrl);
-            if (response.ok) {
-                return response;
-            }
-            lastError = new Error(`Proxy ${proxy} failed with status ${response.status}`);
-        } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error));
-            console.warn(`Proxy ${proxy} failed to fetch ${resourceUrl}. Trying next...`, lastError);
-        }
-    }
-    throw new Error(`All proxies failed to fetch ${resourceUrl}. Last error: ${lastError?.message}`);
-}
-
-
-// --- KML Parsers ---
-
-/**
- * Parses KML text where properties are simple <name> and <description> tags.
- * Used for Turn Restrictions and Road Network data.
- */
-function parseKMLWithSimpleProperties(kmlText: string, type: 'Point' | 'LineString'): any {
-    const parser = new DOMParser();
-    const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
-    const placemarks = kmlDoc.querySelectorAll('Placemark');
-    const features: any[] = [];
-
-    placemarks.forEach(placemark => {
-        const name = placemark.querySelector('name')?.textContent || '';
-        const description = placemark.querySelector('description')?.textContent || '';
-        const coordinatesNode = placemark.querySelector('coordinates');
-        
-        if (!coordinatesNode) return;
-        const coordinatesStr = coordinatesNode.textContent?.trim();
-        if (!coordinatesStr) return;
-
-        let geometry: any = null;
-
-        if (type === 'Point') {
-            const coords = coordinatesStr.split(',').map(c => parseFloat(c));
-            if (coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
-                geometry = { type: 'Point', coordinates: [coords[0], coords[1]] };
-            }
-        } else if (type === 'LineString') {
-            const coords = coordinatesStr
-                .split(/\s+/)
-                .map(coordPair => {
-                    const pair = coordPair.split(',').map(c => parseFloat(c));
-                    if (pair.length >= 2 && !isNaN(pair[0]) && !isNaN(pair[1])) {
-                        return pair.slice(0, 2);
-                    }
-                    return null;
-                })
-                .filter((p): p is number[] => p !== null);
-
-             if (coords.length > 1) {
-                geometry = { type: 'LineString', coordinates: coords };
-            }
-        }
-        
-        if (geometry) {
-             features.push({
-                type: 'Feature',
-                geometry,
-                properties: { name, description }
-            });
-        }
-    });
-
-    return { type: 'FeatureCollection', features };
-}
-
-/**
- * Parses KML text where properties are stored in an HTML table within the <description> tag.
- * Used for most CSDI portal point-based data.
- */
-// FIX: Made function generic to handle different property types.
-function parseKMLWithTableProperties<P>(kmlText: string): GeoJSON.FeatureCollection<GeoJSON.Point, P> {
-    const parser = new DOMParser();
-    const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
-    const placemarks = kmlDoc.querySelectorAll('Placemark');
-    const features: GeoJSON.Feature<GeoJSON.Point, P>[] = [];
-
-    placemarks.forEach(placemark => {
-        const coordinatesNode = placemark.querySelector('coordinates');
-        const descriptionNode = placemark.querySelector('description');
-        if (!coordinatesNode?.textContent) return;
-
-        const properties: { [key: string]: any } = {
-            name: placemark.querySelector('name')?.textContent || ''
-        };
-
-        if (descriptionNode?.textContent) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = descriptionNode.textContent;
-            const rows = tempDiv.querySelectorAll('tr');
-            rows.forEach(row => {
-                const cells = row.querySelectorAll('td');
-                if (cells.length === 2) {
-                    const key = cells[0].textContent?.trim();
-                    const value = cells[1].textContent?.trim() ?? '';
-                    if (key) {
-                        const numValue = Number(value);
-                        properties[key] = !isNaN(numValue) && value !== '' ? numValue : value;
-                    }
-                }
-            });
-        }
-
-        const coords = coordinatesNode.textContent.trim().split(',').map(c => parseFloat(c));
-        if (coords.length >= 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
-            features.push({
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: [coords[0], coords[1]] },
-                properties: properties as P,
-            });
-        }
-    });
-    return { type: 'FeatureCollection', features };
-}
-
 
 // --- Car Parks ---
 export async function fetchCarparkData(lang: Language): Promise<Carpark[]> {
@@ -194,9 +64,7 @@ export async function fetchCarparkData(lang: Language): Promise<Carpark[]> {
 export async function fetchAttractionsData(): Promise<AttractionFeature[]> {
     const response = await fetch(API_ATTRACTIONS_URL);
     if (!response.ok) throw new Error('Failed to fetch attractions data.');
-    const kmlText = await response.text();
-    // FIX: Explicitly set the properties type to match AttractionFeature.
-    const data = parseKMLWithTableProperties<AttractionFeature['properties']>(kmlText);
+    const data = await response.json();
     return data.features || [];
 }
 
@@ -204,9 +72,7 @@ export async function fetchAttractionsData(): Promise<AttractionFeature[]> {
 export async function fetchViewingPointsData(): Promise<ViewingPointFeature[]> {
     const response = await fetch(API_VIEWING_POINTS_URL);
     if (!response.ok) throw new Error('Failed to fetch viewing points data.');
-    const kmlText = await response.text();
-    // FIX: Explicitly set the properties type to match ViewingPointFeature.
-    const data = parseKMLWithTableProperties<ViewingPointFeature['properties']>(kmlText);
+    const data = await response.json();
     return data.features || [];
 }
 
@@ -256,16 +122,44 @@ export async function fetchParkingMetersInBounds(bounds: L.LatLngBounds): Promis
 
     const response = await fetch(locationUrl);
     if (!response.ok) throw new Error('Failed to fetch parking meter location data.');
-    const kmlText = await response.text();
-    // FIX: Explicitly set the properties type to match ParkingMeterFeature.
-    const data = parseKMLWithTableProperties<ParkingMeterFeature['properties']>(kmlText);
+    const data = await response.json();
     return data.features || [];
 }
 
 // --- Turn Restrictions ---
+function parseKMLToGeoJSON(kmlText: string): { type: 'FeatureCollection'; features: TurnRestrictionFeature[] } {
+    const parser = new DOMParser();
+    const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+    const placemarks = kmlDoc.querySelectorAll('Placemark');
+    const features: TurnRestrictionFeature[] = [];
+
+    placemarks.forEach(placemark => {
+        const name = placemark.querySelector('name')?.textContent || '';
+        const description = placemark.querySelector('description')?.textContent || '';
+        const coordinates = placemark.querySelector('coordinates')?.textContent;
+
+        if (coordinates) {
+            const coords = coordinates.trim().split(',').map(c => parseFloat(c));
+            if (coords.length >= 2) {
+                features.push({
+                    type: 'Feature',
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [coords[0], coords[1]] // lon, lat
+                    },
+                    properties: { name, description }
+                });
+            }
+        }
+    });
+
+    return { type: 'FeatureCollection', features };
+}
+
 export async function fetchTurnRestrictionsData(): Promise<TurnRestrictionFeature[]> {
     try {
-        const response = await fetchWithProxyFallback(API_TURN_RESTRICTIONS_URL);
+        const response = await fetch(API_TURN_RESTRICTIONS_URL);
+        if (!response.ok) throw new Error('Failed to fetch turn restrictions KMZ data.');
 
         const kmzBlob = await response.blob();
         // @ts-ignore JSZip is loaded from CDN
@@ -275,50 +169,43 @@ export async function fetchTurnRestrictionsData(): Promise<TurnRestrictionFeatur
         if (!kmlFile) throw new Error('No KML file found in KMZ.');
 
         const kmlText = await zip.files[kmlFile].async('text');
-        const geojsonData = parseKMLWithSimpleProperties(kmlText, 'Point');
-        return geojsonData.features;
-    } catch(error) {
+        const geojsonData = parseKMLToGeoJSON(kmlText);
+        return geojsonData.features || [];
+    } catch (error) {
         console.error("Error fetching turn restrictions:", error);
         return [];
     }
 }
 
-
 // --- Traffic Features ---
 export async function fetchTrafficFeaturesNearby(latlng: L.LatLng): Promise<TrafficFeature[]> {
+    const buffer = 0.001; // Approx 100 meters
+    const bounds = L.latLngBounds(
+        [latlng.lat - buffer, latlng.lng - buffer],
+        [latlng.lat + buffer, latlng.lng + buffer]
+    );
+    const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
+    const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
+    const filter = `<Filter><BBOX><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></BBOX></Filter>`;
+    
+    const url = `${API_TRAFFIC_FEATURES_BASE_URL}&filter=${encodeURIComponent(filter)}`;
     try {
-        const buffer = 0.035; // Approx 3.5km in degrees
-        const lowerCorner = `${latlng.lat - buffer} ${latlng.lng - buffer}`;
-        const upperCorner = `${latlng.lat + buffer} ${latlng.lng + buffer}`;
-        const filter = `<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
-        
-        const url = `${API_TRAFFIC_FEATURES_BASE_URL}&filter=${encodeURIComponent(filter)}`;
-
         const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch traffic features data.');
-        const kmlText = await response.text();
-        // FIX: Explicitly set the properties type to match TrafficFeature.
-        const data = parseKMLWithTableProperties<TrafficFeature['properties']>(kmlText);
+        if (!response.ok) throw new Error('Failed to fetch traffic features.');
+        const data = await response.json();
         return data.features || [];
     } catch (error) {
-        console.error("Error fetching traffic features data:", error);
+        console.error("Error fetching traffic features:", error);
         return [];
     }
 }
 
 // --- Permits ---
 export async function fetchPermitData(): Promise<PermitFeature[]> {
-    try {
-        const response = await fetch(API_PERMIT_URL);
-        if (!response.ok) throw new Error('Failed to fetch permit data.');
-        const kmlText = await response.text();
-        // FIX: Explicitly set the properties type to match PermitFeature.
-        const data = parseKMLWithTableProperties<PermitFeature['properties']>(kmlText);
-        return data.features || [];
-    } catch (error) {
-        console.error("Error fetching permit data:", error);
-        return [];
-    }
+    const response = await fetch(API_PERMIT_URL);
+    if (!response.ok) throw new Error('Failed to fetch permit data.');
+    const data = await response.json();
+    return data.features || [];
 }
 
 // --- Prohibitions ---
@@ -328,235 +215,186 @@ export async function fetchProhibitionData(): Promise<ProhibitionFeature[]> {
             fetch(API_PROHIBITION_PC_URL),
             fetch(API_PROHIBITION_ALL_URL)
         ]);
-
-        if (!pcResponse.ok || !allResponse.ok) {
-            console.error('Failed to fetch one or more prohibition datasets.');
-            return [];
-        }
-
-        const pcKml = await pcResponse.text();
-        const allKml = await allResponse.text();
-
-        // FIX: Explicitly set the properties type to match ProhibitionFeature.
-        const pcData = parseKMLWithTableProperties<ProhibitionFeature['properties']>(pcKml);
-        const allData = parseKMLWithTableProperties<ProhibitionFeature['properties']>(allKml);
-
-        const combinedFeatures = [
-            ...(pcData.features || []),
-            ...(allData.features || [])
-        ];
+        if (!pcResponse.ok || !allResponse.ok) throw new Error('Failed to fetch prohibition data.');
         
-        return combinedFeatures;
+        const pcData = await pcResponse.json();
+        const allData = await allResponse.json();
 
+        const pcFeatures = pcData.features || [];
+        const allFeatures = allData.features || [];
+
+        return [...pcFeatures, ...allFeatures];
     } catch (error) {
         console.error("Error fetching prohibition data:", error);
         return [];
     }
 }
 
-// --- Road Network and Traffic Speed ---
+// --- Road Network ---
+export async function fetchRoadNetworkData(): Promise<RoadNetworkFeature[]> {
+    const baseUrl = API_ROAD_NETWORK_URL;
+    const allFeaturesMap = new Map<string, RoadNetworkFeature>();
+    const pageSize = 1000; // WFS server record limit.
 
-// --- IndexedDB Caching for Road Network ---
-const DB_NAME = 'HKMapCache';
-const DB_VERSION = 1;
-const ROAD_NETWORK_STORE = 'roadNetwork';
-const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+    // Define the 3x3 grid for Hong Kong
+    const minLat = 22.15;
+    const maxLat = 22.62;
+    const minLon = 113.81;
+    const maxLon = 114.45;
 
-interface CacheEntry<T> {
-    timestamp: number;
-    data: T;
-}
+    const latStep = (maxLat - minLat) / 3;
+    const lonStep = (maxLon - minLon) / 3;
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function getDb(): Promise<IDBDatabase> {
-    if (dbPromise) {
-        return dbPromise;
-    }
-    dbPromise = new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(ROAD_NETWORK_STORE)) {
-                db.createObjectStore(ROAD_NETWORK_STORE);
-            }
-        };
-    });
-    return dbPromise;
-}
-
-async function getCachedRoadNetwork(): Promise<RoadNetworkFeature[] | null> {
-    try {
-        const db = await getDb();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction(ROAD_NETWORK_STORE, 'readonly');
-            const store = transaction.objectStore(ROAD_NETWORK_STORE);
-            const request = store.get('geometry');
-
-            request.onerror = () => reject(request.error);
-            request.onsuccess = () => {
-                const result = request.result as CacheEntry<RoadNetworkFeature[]> | undefined;
-                if (result && (Date.now() - result.timestamp < CACHE_EXPIRY_MS)) {
-                    console.log("Loaded road network from cache.");
-                    resolve(result.data);
-                } else {
-                    if (result) console.log("Road network cache is stale.");
-                    else console.log("Road network not found in cache.");
-                    resolve(null);
-                }
-            };
-        });
-    } catch (error) {
-        console.error("Error accessing IndexedDB:", error);
-        return null;
-    }
-}
-
-/**
- * Parses a GML string into a GeoJSON FeatureCollection format that the app can use.
- * This is specific to the CENTERLINE.gml structure.
- */
-function parseGMLtoGeoJSON(gmlText: string): RoadNetworkFeature[] {
-    const parser = new DOMParser();
-    const gmlDoc = parser.parseFromString(gmlText, 'application/xml');
-    
-    const parserError = gmlDoc.querySelector('parsererror');
-    if (parserError) {
-        console.error("XML parsing error:", parserError.textContent);
-        throw new Error("Failed to parse GML file.");
-    }
-    
-    const features: RoadNetworkFeature[] = [];
-    // Use `getElementsByTagNameNS` for robust namespace handling.
-    const featureMembers = gmlDoc.getElementsByTagNameNS('http://www.opengis.net/gml/3.2', 'featureMember');
-
-    for (const member of Array.from(featureMembers)) {
-        // Use a wildcard namespace ('*') for the app-specific elements like CENTERLINE, IRN, etc.
-        const centerline = member.getElementsByTagNameNS('*', 'CENTERLINE')[0];
-        if (!centerline) continue;
-
-        const irnNode = centerline.getElementsByTagNameNS('*', 'IRN')[0];
-        const nameNode = centerline.getElementsByTagNameNS('*', 'ST_NAME_EN')[0];
-        const posListNode = centerline.getElementsByTagNameNS('http://www.opengis.net/gml/3.2', 'posList')[0];
-
-        const segmentId = irnNode?.textContent;
-        if (!segmentId || !posListNode?.textContent) continue;
-        
-        const name = nameNode?.textContent || 'Unnamed Road';
-        
-        // posList is a string of space-separated numbers: "lat1 lon1 lat2 lon2 ..."
-        const coordsStr = posListNode.textContent.trim().split(/\s+/);
-        const coordinates: number[][] = [];
-        
-        for (let i = 0; i < coordsStr.length; i += 2) {
-            const lat = parseFloat(coordsStr[i]);
-            const lon = parseFloat(coordsStr[i + 1]);
-            if (!isNaN(lat) && !isNaN(lon)) {
-                coordinates.push([lon, lat]); // GeoJSON format requires [longitude, latitude]
-            }
+    const districts = [];
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            districts.push({
+                lowerCorner: `${(minLat + i * latStep).toFixed(4)} ${(minLon + j * lonStep).toFixed(4)}`,
+                upperCorner: `${(minLat + (i + 1) * latStep).toFixed(4)} ${(minLon + (j + 1) * lonStep).toFixed(4)}`
+            });
         }
-        
-        if (coordinates.length < 2) continue; // A LineString needs at least two points.
-
-        const feature: RoadNetworkFeature = {
-            type: 'Feature',
-            geometry: {
-                type: 'LineString',
-                coordinates: coordinates,
-            },
-            properties: {
-                name: name,
-                description: `Road Segment ID: ${segmentId}`,
-                segment_id: segmentId,
-            },
-        };
-        features.push(feature);
     }
-    return features;
-}
 
-export async function fetchRoadNetworkGeometry(onChunk: (chunk: RoadNetworkFeature[]) => void): Promise<void> {
-    try {
-        const cachedData = await getCachedRoadNetwork();
-        if (cachedData) {
-            // Stream cached data in chunks to maintain a consistent UI experience
-            const chunkSize = 1000;
-            for (let i = 0; i < cachedData.length; i += chunkSize) {
-                const chunk = cachedData.slice(i, i + chunkSize);
-                // Yield to the main thread to allow UI updates between chunks
-                await new Promise(resolve => setTimeout(() => {
-                    onChunk(chunk);
-                    resolve(true);
-                }, 0));
-            }
-            return;
-        }
+    // Sequentially fetch data for each district
+    for (const district of districts) {
+        let hasMore = true;
+        let startIndex = 0;
         
-        console.log("Fetching road network GML on main thread...");
-        const response = await fetch(API_ROAD_NETWORK_URL);
-        if (!response.ok) throw new Error(`Failed to fetch GML with status ${response.status}`);
-        const gmlText = await response.text();
+        const districtFilter = `<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${district.lowerCorner}</gml:lowerCorner><gml:upperCorner>${district.upperCorner}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
 
-        if (!gmlText) throw new Error('Empty GML data received for road network.');
-        
-        console.log("Parsing road network GML on main thread...");
-        const features = parseGMLtoGeoJSON(gmlText);
-        console.log(`Parsed ${features.length} road network features.`);
-        
-        if (features.length > 0 && window.indexedDB) {
+        while (hasMore) {
+            const url = `${baseUrl}&resultOffset=${startIndex}&resultRecordCount=${pageSize}&filter=${encodeURIComponent(districtFilter)}`;
+            
             try {
-                const db = await getDb();
-                const transaction = db.transaction(ROAD_NETWORK_STORE, 'readwrite');
-                const store = transaction.objectStore(ROAD_NETWORK_STORE);
-                store.put({ timestamp: Date.now(), data: features }, 'geometry');
-                console.log("Cached road network geometry in IndexedDB.");
-            } catch (dbError) {
-                console.error("Failed to cache road network geometry:", dbError);
+                const response = await fetch(url);
+                if (!response.ok) {
+                    console.error(`Failed to fetch road network data for district ${district.lowerCorner}. Status: ${response.status}`);
+                    hasMore = false; // Stop trying for this district on error
+                    continue; 
+                }
+                
+                const data = await response.json();
+                const features = data.features || [];
+
+                if (features.length > 0) {
+                    features.forEach((feature: RoadNetworkFeature) => {
+                        if (feature.properties && feature.properties.ROUTE_ID) {
+                            const routeId = String(feature.properties.ROUTE_ID).trim();
+                            if (routeId && !allFeaturesMap.has(routeId)) {
+                                feature.properties.ROUTE_ID = routeId;
+                                allFeaturesMap.set(routeId, feature);
+                            }
+                        }
+                    });
+                    
+                    startIndex += features.length;
+                    if (features.length < pageSize) {
+                        hasMore = false; // Last page for this district
+                    }
+                } else {
+                    hasMore = false; // No more features in this district
+                }
+            } catch (error) {
+                console.error(`An error occurred while fetching road network data for district ${district.lowerCorner}:`, error);
+                hasMore = false; // Stop trying for this district on error
             }
         }
-
-        // Stream data in chunks to the component to allow for progressive rendering
-        const chunkSize = 1000;
-        for (let i = 0; i < features.length; i += chunkSize) {
-            const chunk = features.slice(i, i + chunkSize);
-             await new Promise(resolve => setTimeout(() => {
-                onChunk(chunk);
-                resolve(true);
-            }, 0));
-        }
-
-    } catch (error) {
-        if (error instanceof Error) {
-             console.error("An error occurred during road network geometry processing:", error.message);
-        } else {
-             console.error("An unknown error occurred while fetching road network geometry:", error);
-        }
-        throw error; // Re-throw so the caller can handle it
     }
+    
+    return Array.from(allFeaturesMap.values());
 }
 
-export async function fetchTrafficSpeedData(): Promise<TrafficSpeedData> {
-    const speedMap: TrafficSpeedData = new Map();
+
+// --- Traffic Speed ---
+export async function fetchTrafficSpeedData(): Promise<TrafficSpeedInfo> {
     try {
         const response = await fetch(API_TRAFFIC_SPEED_URL);
-        if (!response.ok) throw new Error('Failed to fetch traffic speed XML.');
+        if (!response.ok) {
+            console.error(`Traffic speed fetch failed with status: ${response.status}`);
+            throw new Error(`Traffic speed fetch failed: ${response.statusText}`);
+        }
         const xmlText = await response.text();
         const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
-        const segments = xmlDoc.querySelectorAll('segment');
-        segments.forEach(segment => {
-            const id = segment.getAttribute('segment_id');
-            const speedNode = segment.querySelector('speed');
-            const speed = speedNode ? parseFloat(speedNode.textContent || '0') : 0;
-            if (id) {
-                speedMap.set(id, speed);
+        const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+        const parserError = xmlDoc.getElementsByTagName("parsererror");
+        if (parserError.length) {
+            console.error("Error parsing traffic speed XML:", parserError[0].textContent);
+            return {};
+        }
+
+        const result: TrafficSpeedInfo = {};
+        
+        // Primary parsing strategy based on user-provided XML format.
+        const segments = xmlDoc.getElementsByTagName('segment');
+        if (segments.length > 0) {
+            for (let i = 0; i < segments.length; i++) {
+                const item = segments[i];
+                
+                const segmentIdNode = item.getElementsByTagName('segment_id')[0];
+                const speedNode = item.getElementsByTagName('speed')[0];
+                const validNode = item.getElementsByTagName('valid')[0];
+
+                if (segmentIdNode && speedNode && validNode) {
+                    const segmentId = segmentIdNode.textContent?.trim();
+                    const speedText = speedNode.textContent?.trim();
+                    const isValid = validNode.textContent?.trim().toUpperCase() === 'Y';
+
+                    if (segmentId && speedText && isValid) {
+                        const speedValue = parseFloat(speedText);
+                        
+                        if (!isNaN(speedValue)) {
+                            let reliability: 1 | 2 | 3;
+                            if (speedValue > 40) reliability = 1; // smooth
+                            else if (speedValue > 20) reliability = 2; // slow
+                            else reliability = 3; // congested
+                            
+                            result[segmentId] = {
+                                speed: Math.round(speedValue),
+                                reliability: reliability
+                            };
+                        }
+                    }
+                }
             }
-        });
-        return speedMap;
+        }
+        
+        // Fallback parsing strategy for the other known XML format.
+        if (Object.keys(result).length === 0) {
+            const speedItems = xmlDoc.getElementsByTagName('jtis_speed');
+            if (speedItems.length > 0) {
+                 for (let i = 0; i < speedItems.length; i++) {
+                    const item = speedItems[i];
+                    const segmentIdNode = item.getElementsByTagName('segment_id')[0];
+                    const speedNode = item.getElementsByTagName('traffic_speed')[0];
+                    const saturationNode = item.getElementsByTagName('road_saturation_level')[0];
+
+                    if (segmentIdNode && speedNode && saturationNode) {
+                        const segmentId = segmentIdNode.textContent?.trim();
+                        const speed = speedNode.textContent?.trim();
+                        const saturation = saturationNode.textContent?.trim();
+                        if (segmentId && speed && saturation) {
+                            const speedValue = parseInt(speed, 10);
+                            if (!isNaN(speedValue)) {
+                                let reliability: 1 | 2 | 3 | 0 = 0;
+                                switch (saturation.toUpperCase()) {
+                                    case 'TRAFFIC SMOOTH': reliability = 1; break;
+                                    case 'TRAFFIC SLOW': reliability = 2; break;
+                                    case 'TRAFFIC CONGESTED': reliability = 3; break;
+                                }
+                                if (reliability !== 0) {
+                                    result[segmentId] = { speed: speedValue, reliability: reliability };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return result;
     } catch (error) {
-        console.error("Error fetching traffic speed data:", error);
-        return speedMap; // Return empty map on error
+        console.error("An exception occurred in fetchTrafficSpeedData:", error);
+        return {};
     }
 }

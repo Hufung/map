@@ -5,13 +5,47 @@ import type { Map as LeafletMap, LatLng, LayerGroup } from 'leaflet';
 
 import {
     Carpark, AttractionFeature, ViewingPointFeature, 
-    TurnRestrictionFeature, TrafficFeature, PermitFeature, ProhibitionFeature, RoadNetworkFeature, TrafficSpeedData, Language, VisibleLayers, GroupedParkingMeter
+    TurnRestrictionFeature, TrafficFeature, PermitFeature, ProhibitionFeature, 
+    RoadNetworkFeature, TrafficSpeedInfo,
+    Language, VisibleLayers, GroupedParkingMeter
 } from '../types';
 import { i18n } from '../constants';
 import { fetchParkingMetersInBounds, getCachedParkingMeterStatus, fetchTrafficFeaturesNearby } from '../services/dataService';
 import { createCarparkIcon, createAttractionIcon, createViewingPointIcon, createParkingMeterIcon, createTurnRestrictionIcon, createTrafficFeatureIcon, createPermitIcon, createProhibitionIcon } from './MapIcons';
 import { RoutePanel } from './RoutePanel';
 import { NavigationNotification } from './NavigationNotification';
+
+// Fix: Add leaflet-routing-machine type declarations
+declare module 'leaflet' {
+    namespace Routing {
+        interface IRoute {
+            summary: {
+                totalDistance: number;
+                totalTime: number;
+            };
+            coordinates: LatLng[];
+            instructions: { text: string }[];
+        }
+
+        interface RoutingErrorEvent {
+            error: {
+                message: string;
+            };
+        }
+
+        interface RoutesFoundEvent {
+            routes: IRoute[];
+        }
+
+        class Control extends L.Control {
+            on(type: 'routesfound', fn: (e: RoutesFoundEvent) => void, context?: any): this;
+            on(type: 'routingerror', fn: (e: RoutingErrorEvent) => void, context?: any): this;
+            on(type: string, fn: L.LeafletEventHandlerFn, context?: any): this;
+        }
+
+        function control(options: any): Control;
+    }
+}
 
 // Fix for default Leaflet icon path issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -39,8 +73,8 @@ interface MapComponentProps {
     turnRestrictionsData: TurnRestrictionFeature[];
     permitData: PermitFeature[];
     prohibitionData: ProhibitionFeature[];
-    roadNetworkGeometry: RoadNetworkFeature[];
-    trafficSpeedData: TrafficSpeedData;
+    roadNetworkData: RoadNetworkFeature[];
+    trafficSpeedData: TrafficSpeedInfo;
     onMarkerClick: (carpark: Carpark) => void;
     navigationTarget: { lat: number, lon: number } | null;
     onNavigationStarted: () => void;
@@ -49,7 +83,7 @@ interface MapComponentProps {
 export const MapComponent: React.FC<MapComponentProps> = ({
     setMap, language, visibleLayers, carparkData, attractionsData,
     viewingPointsData, turnRestrictionsData, permitData, prohibitionData,
-    roadNetworkGeometry, trafficSpeedData,
+    roadNetworkData, trafficSpeedData,
     onMarkerClick, navigationTarget, onNavigationStarted
 }) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -60,8 +94,8 @@ export const MapComponent: React.FC<MapComponentProps> = ({
     const positionWatchIdRef = useRef<number | null>(null);
     const warnedFeaturesRef = useRef<Set<string>>(new Set());
     const userLatLngRef = useRef<LatLng | null>(null);
-    const processedFeaturesCount = useRef(0);
-
+    const plotRoadsTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    
     const [currentRoute, setCurrentRoute] = useState<L.Routing.IRoute | null>(null);
     const [notification, setNotification] = useState<string>('');
     const [localTrafficFeatures, setLocalTrafficFeatures] = useState<TrafficFeature[]>([]);
@@ -106,24 +140,19 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             mapRef.current.addLayer(layer);
         }
 
-        const LWithGeometry = L as any;
-        if (!LWithGeometry.GeometryUtil) {
-            console.error("Leaflet.GeometryUtil plugin is not loaded. Cannot plot turn restrictions along route.");
-            return;
-        }
-
         const routeCoords = route.coordinates.map(c => L.latLng(c.lat, c.lng));
-        const routeLine = L.polyline(routeCoords);
         
         turnRestrictionsData.forEach(feature => {
             const [lon, lat] = feature.geometry.coordinates;
             const point = L.latLng(lat, lon);
             
-            const closestPointOnRoute = LWithGeometry.GeometryUtil.closest(mapRef.current!, routeLine, point) as L.LatLng | null;
-
-            if (closestPointOnRoute && point.distanceTo(closestPointOnRoute) < 50) { // 50m buffer
-                const icon = createTurnRestrictionIcon();
-                L.marker(point, { icon }).addTo(layer).bindPopup(`<strong>${t.turnRestrictionWarning}</strong><br>${feature.properties.name}`);
+            // A simple proximity check since L.GeometryUtil might not be available
+            for (const routePoint of routeCoords) {
+                if (point.distanceTo(routePoint) < 50) { // 50m buffer
+                    const icon = createTurnRestrictionIcon();
+                    L.marker(point, { icon }).addTo(layer).bindPopup(`<strong>${t.turnRestrictionWarning}</strong><br>${feature.properties.name}`);
+                    break; // Add only once
+                }
             }
         });
     }, [turnRestrictionsData, t.turnRestrictionWarning]);
@@ -242,8 +271,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             setLocalTrafficFeatures(features);
         });
         
-        // FIX: Explicitly type the event object 'e' as L.PopupEvent to fix untyped querySelector call.
-        map.on('popupopen', (e: L.PopupEvent) => {
+        map.on('popupopen', (e) => {
             const navBtn = e.popup.getElement()?.querySelector<HTMLButtonElement>('.navigate-btn');
             if(navBtn?.dataset.lat && navBtn?.dataset.lon) {
                 navBtn.onclick = () => handleNavigation(parseFloat(navBtn.dataset.lat!), parseFloat(navBtn.dataset.lon!));
@@ -315,55 +343,80 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             L.marker([lat, lon], { icon }).addTo(layer).bindPopup(pop);
         });
     }, [prohibitionData]);
-    
-    // Plot Traffic Speed
+
+    // Plot traffic speed layer progressively
     useEffect(() => {
         const layer = layersRef.current.trafficSpeed;
         if (!layer) return;
 
-        // If the road network geometry data array is shorter than what we've processed,
-        // it means the data has been reset (e.g., on error or retry). Clear the layer.
-        if (roadNetworkGeometry.length < processedFeaturesCount.current) {
-            layer.clearLayers();
-            processedFeaturesCount.current = 0;
-        }
-    
-        // If there's no geometry data or traffic speed data, there's nothing to render.
-        if (roadNetworkGeometry.length === 0 || trafficSpeedData.size === 0) {
-            return;
+        // Clear previous layers and any ongoing plotting process
+        layer.clearLayers();
+        if (plotRoadsTimeoutRef.current) {
+            clearTimeout(plotRoadsTimeoutRef.current);
         }
 
-        // Get only the new features that haven't been rendered yet.
-        const newFeatures = roadNetworkGeometry.slice(processedFeaturesCount.current);
-        if (newFeatures.length === 0) return;
-    
-        const getSpeedColor = (speed: number) => {
-            if (speed > 60) return '#28a745'; // Green for fast
-            if (speed > 30) return '#ffc107'; // Orange for medium
-            return '#dc3545'; // Red for slow
+        const getTrafficStyle = (routeId: string): { color: string; weight: number } => {
+            const speedInfo = trafficSpeedData[routeId];
+            // Roads with no data, or unknown status, are thinner and grey
+            if (!speedInfo || speedInfo.reliability === 0) {
+                return { color: '#888888', weight: 3 }; 
+            }
+            switch (speedInfo.reliability) {
+                case 1: return { color: '#28a745', weight: 4 }; // Green for Smooth
+                case 2: return { color: '#ffc107', weight: 5 }; // Yellow, thicker for Slow
+                case 3: return { color: '#dc3545', weight: 6 }; // Red, thickest for Congested
+                default: return { color: '#888888', weight: 3 };
+            }
         };
-    
-        newFeatures.forEach(feature => {
-            const segmentId = feature.properties.segment_id;
-            if (!segmentId) return;
-    
-            const speed = trafficSpeedData.get(segmentId);
-            const color = speed !== undefined ? getSpeedColor(speed) : '#808080'; // Grey for no data
-    
-            L.geoJSON(feature, {
-                style: {
-                    color: color,
-                    weight: 5,
-                    opacity: 0.7
-                }
-            }).bindPopup(`<b>${feature.properties.name}</b><br>Speed: ${speed !== undefined ? `${speed} km/h` : 'N/A'}`).addTo(layer);
-        });
-    
-        // Update the counter to the new total length.
-        processedFeaturesCount.current = roadNetworkGeometry.length;
-    
-    }, [roadNetworkGeometry, trafficSpeedData]);
 
+        const plotChunk = (index = 0) => {
+            const chunkSize = 200; // Render 200 lines per chunk
+            const chunk = roadNetworkData.slice(index, index + chunkSize);
+
+            chunk.forEach(feature => {
+                const routeId = feature.properties.ROUTE_ID;
+                const speedInfo = trafficSpeedData[routeId];
+                const { color, weight } = getTrafficStyle(routeId);
+                const geometry = feature.geometry;
+
+                let latLngs: L.LatLngExpression[] | L.LatLngExpression[][] = [];
+
+                if (geometry.type === 'LineString') {
+                    latLngs = geometry.coordinates.map(coord => L.latLng(coord[1], coord[0]));
+                } else if (geometry.type === 'MultiLineString') {
+                    latLngs = geometry.coordinates.map(line => line.map(coord => L.latLng(coord[1], coord[0])));
+                } else {
+                    return; 
+                }
+                
+                if (latLngs.length === 0) return;
+                
+                const line = L.polyline(latLngs, { color, weight, opacity: 0.85 }).addTo(layer);
+
+                const roadName = language === 'en_US' ? feature.properties.ROAD_NAME_ENG : feature.properties.ROAD_NAME_CHI;
+                let popupContent = `<strong>${roadName}</strong><br>${t.routeId}: ${routeId}`;
+                if (speedInfo) {
+                    popupContent += `<br>${t.avgSpeed}: ${speedInfo.speed} km/h`;
+                }
+                line.bindPopup(popupContent);
+            });
+
+            // If there are more chunks to plot, schedule the next one
+            if (index + chunkSize < roadNetworkData.length) {
+                plotRoadsTimeoutRef.current = window.setTimeout(() => plotChunk(index + chunkSize), 20);
+            }
+        };
+
+        plotChunk();
+
+        // Cleanup function to clear timeout if component unmounts or dependencies change
+        return () => {
+            if (plotRoadsTimeoutRef.current) {
+                clearTimeout(plotRoadsTimeoutRef.current);
+            }
+        };
+
+    }, [roadNetworkData, trafficSpeedData, language, t.routeId, t.avgSpeed]);
 
     // Plot other features
     useEffect(() => {
@@ -426,8 +479,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({
                     totalCount: 0,
                     availableCount: 0,
                     occupiedCount: 0,
-                    // FIX: Removed explicit generic type arguments from Set constructor to fix ts(2347).
-                    // The type is inferred from the `GroupedParkingMeter` interface.
                     vehicleTypes: new Set(),
                     opPeriods: new Set()
                 });
@@ -479,11 +530,11 @@ export const MapComponent: React.FC<MapComponentProps> = ({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        // Fix: Use ReturnType<typeof setTimeout> for browser environments
-        let moveEndTimer: ReturnType<typeof setTimeout>;
+        
+        let moveEndTimer: ReturnType<typeof window.setTimeout>;
         const onMoveEnd = () => {
             clearTimeout(moveEndTimer);
-            moveEndTimer = setTimeout(() => {
+            moveEndTimer = window.setTimeout(() => {
                 if(visibleLayers.parkingMeters) plotParkingMeters();
             }, 500);
         };
@@ -495,23 +546,11 @@ export const MapComponent: React.FC<MapComponentProps> = ({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-
-        // Reset the processed features count if the traffic layer is toggled off
-        if (!visibleLayers.trafficSpeed) {
-            processedFeaturesCount.current = 0;
-        }
-
         Object.entries(visibleLayers).forEach(([key, isVisible]) => {
             const layer = layersRef.current[key];
             if (layer) {
                 if (isVisible && !map.hasLayer(layer)) map.addLayer(layer);
-                else if (!isVisible && map.hasLayer(layer)) {
-                    // Clear layer on removal to free up memory and ensure clean state
-                    if (key === 'trafficSpeed') {
-                        layer.clearLayers();
-                    }
-                    map.removeLayer(layer);
-                }
+                else if (!isVisible && map.hasLayer(layer)) map.removeLayer(layer);
             }
         });
         if(visibleLayers.parkingMeters) plotParkingMeters();

@@ -3,6 +3,20 @@ import L from 'leaflet';
 import { Language } from '../types';
 import { i18n } from '../constants';
 
+// Fix: Add leaflet-routing-machine type declarations
+declare module 'leaflet' {
+    namespace Routing {
+        interface IRoute {
+            summary: {
+                totalDistance: number;
+                totalTime: number;
+            };
+            instructions: { text: string }[];
+            coordinates: L.LatLng[];
+        }
+    }
+}
+
 interface RoutePanelProps {
     // Fix: Use L.Routing.IRoute as the correct type for a route object.
     route: L.Routing.IRoute;

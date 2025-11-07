@@ -11,10 +11,10 @@ export const NavigationNotification: React.FC<NotificationProps> = ({ message, o
     useEffect(() => {
         if (message) {
             setVisible(true);
-            const timer = setTimeout(() => {
+            const timer = window.setTimeout(() => {
                 setVisible(false);
                 // Allow time for fade out animation before calling dismiss
-                setTimeout(onDismiss, 300);
+                window.setTimeout(onDismiss, 300);
             }, 5000); // Display for 5 seconds
 
             return () => clearTimeout(timer);

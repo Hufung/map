@@ -1,24 +1,18 @@
+const CORS_PROXY = 'https://corsproxy.io/?';
+
 export const API_INFO_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=info';
 export const API_VACANCY_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=vacancy';
-export const API_ATTRACTIONS_URL = 'https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1728896853370_57183/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Attractions_in_Country_Parks&outputFormat=kml';
-export const API_VIEWING_POINTS_URL = 'https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635142967951_6079/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Viewing_Point&outputFormat=kml&maxFeatures=100';
-export const API_PARKING_METERS_BASE_URL = 'https://portal.csdi.gov.hk/server/services/common/td_rcd_1638930345315_81787/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=parkingspaces&outputFormat=kml&srsName=EPSG:4326';
-export const API_PARKING_METERS_STATUS_URL = 'https://resource.data.one.gov.hk/td/psiparkingspaces/occupancystatus/occupancystatus.csv';
-export const API_TURN_RESTRICTIONS_URL = 'https://static.data.gov.hk/td/road-network-v2/TURN.kmz';
-export const API_TRAFFIC_FEATURES_BASE_URL = 'https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=TRAFFIC_FEATURES&outputFormat=kml&maxFeatures=1000&srsName=EPSG:4326';
-export const API_PERMIT_URL = 'https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PERMIT&outputFormat=kml';
-export const API_PROHIBITION_PC_URL = "https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PROHIBITION&outputFormat=kml&filter=<Filter><PropertyIsEqualTo><PropertyName>EXC_VEH_TYPE</PropertyName><Literal>'PC'</Literal></PropertyIsEqualTo></Filter>";
-export const API_PROHIBITION_ALL_URL = "https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PROHIBITION&outputFormat=kml&filter=<Filter><PropertyIsEqualTo><PropertyName>EXC_VEH_TYPE</PropertyName><Literal>'ALL'</Literal></PropertyIsEqualTo></Filter>";
-export const API_TRAFFIC_SPEED_URL = "https://resource.data.one.gov.hk/td/traffic-detectors/irnAvgSpeed-all.xml";
-export const API_ROAD_NETWORK_URL = "https://static.data.gov.hk/td/road-network-v2/CENTERLINE.gml";
-
-// List of CORS proxies to try as fallbacks.
-export const CORS_PROXIES = [
-    'https://corsproxy.io/?',
-    'https://api.allorigins.win/raw?url=',
-    'https://cors.eu.org/',
-];
-
+export const API_ATTRACTIONS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1728896853370_57183/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Attractions_in_Country_Parks&outputFormat=geojson`;
+export const API_VIEWING_POINTS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635142967951_6079/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Viewing_Point&outputFormat=geojson&maxFeatures=100`;
+export const API_PARKING_METERS_BASE_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638930345315_81787/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=parkingspaces&outputFormat=geojson&srsName=EPSG:4326`;
+export const API_PARKING_METERS_STATUS_URL = `${CORS_PROXY}https://resource.data.one.gov.hk/td/psiparkingspaces/occupancystatus/occupancystatus.csv`;
+export const API_TURN_RESTRICTIONS_URL = `${CORS_PROXY}https://static.data.gov.hk/td/road-network-v2/TURN.kmz`;
+export const API_TRAFFIC_FEATURES_BASE_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=TRAFFIC_FEATURES&outputFormat=geojson&maxFeatures=1000&srsName=EPSG:4326`;
+export const API_PERMIT_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PERMIT&outputFormat=geojson`;
+export const API_PROHIBITION_PC_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PROHIBITION&outputFormat=geojson&filter=<Filter><PropertyIsEqualTo><PropertyName>EXC_VEH_TYPE</PropertyName><Literal>'PC'</Literal></PropertyIsEqualTo></Filter>`;
+export const API_PROHIBITION_ALL_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PROHIBITION&outputFormat=geojson&filter=<Filter><PropertyIsEqualTo><PropertyName>EXC_VEH_TYPE</PropertyName><Literal>'ALL'</Literal></PropertyIsEqualTo></Filter>`;
+export const API_ROAD_NETWORK_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=CENTERLINE&outputFormat=geojson`;
+export const API_TRAFFIC_SPEED_URL = `${CORS_PROXY}https://resource.data.one.gov.hk/td/traffic-detectors/irnAvgSpeed-all.xml`;
 
 export const i18n = {
     'en_US': {
@@ -78,11 +72,9 @@ export const i18n = {
         legendCulDeSac: 'Cul-de-sac',
         legendPermit: 'Permit',
         legendProhibition: 'Prohibition Zone',
-        legendTrafficSpeedTitle: 'Traffic Speed',
-        legendTrafficFast: 'Fast',
-        legendTrafficMedium: 'Medium',
-        legendTrafficSlow: 'Slow',
-        retry: 'Retry',
+        legendTrafficSmooth: 'Smooth Traffic',
+        legendTrafficSlow: 'Slow Traffic',
+        legendTrafficCongested: 'Congested Traffic',
         vehicle_A: 'Any Vehicles (other than Medium and Heavy Goods Vehicles, Buses, Motor Cycles and Pedal Cycles)',
         vehicle_C: 'Coaches',
         vehicle_G: 'Goods Vehicles',
@@ -97,7 +89,10 @@ export const i18n = {
         op_J: '08:00 am - Midnight daily',
         op_A: '08:00 am - Midnight on Mondays to Saturdays (except Sundays and public holidays)',
         op_B: '08:00 am - 08:00 pm daily on Mondays to Saturdays (except Sundays and public holidays)',
-        unknown: 'Unknown'
+        unknown: 'Unknown',
+        avgSpeed: 'Avg Speed',
+        routeId: 'Route ID',
+        initialLoadMessage: 'First time loading may take a moment, please wait...'
     },
     'zh_TW': {
         modalTitle: '停車場詳情',
@@ -156,11 +151,9 @@ export const i18n = {
         legendCulDeSac: '盡頭路',
         legendPermit: '許可證',
         legendProhibition: '禁區',
-        legendTrafficSpeedTitle: '交通速度',
-        legendTrafficFast: '暢順',
-        legendTrafficMedium: '緩慢',
-        legendTrafficSlow: '擠塞',
-        retry: '重試',
+        legendTrafficSmooth: '交通暢順',
+        legendTrafficSlow: '交通緩慢',
+        legendTrafficCongested: '交通擠塞',
         vehicle_A: '任何車輛 (中型及重型貨車、巴士、電單車及機動三輪車除外)',
         vehicle_C: '長途汽車',
         vehicle_G: '貨車',
@@ -175,7 +168,10 @@ export const i18n = {
         op_J: '每天上午8時至午夜',
         op_A: '逢星期一至六上午8時至午夜 (星期日及公眾假期除外)',
         op_B: '逢星期一至六上午8時至晚上8時 (星期日及公眾假期除外)',
-        unknown: '不詳'
+        unknown: '不詳',
+        avgSpeed: '平均速度',
+        routeId: '路線ID',
+        initialLoadMessage: '首次加載可能需要一些時間，請稍候...'
     },
     'zh_CN': {
         modalTitle: '停车场详情',
@@ -234,11 +230,9 @@ export const i18n = {
         legendCulDeSac: '尽头路',
         legendPermit: '许可证',
         legendProhibition: '禁区',
-        legendTrafficSpeedTitle: '交通速度',
-        legendTrafficFast: '畅顺',
-        legendTrafficMedium: '缓慢',
-        legendTrafficSlow: '挤塞',
-        retry: '重试',
+        legendTrafficSmooth: '交通畅顺',
+        legendTrafficSlow: '交通缓慢',
+        legendTrafficCongested: '交通挤塞',
         vehicle_A: '任何车辆 (中型及重型货车、巴士、摩托车及机动三轮车除外)',
         vehicle_C: '长途汽车',
         vehicle_G: '货车',
@@ -253,6 +247,9 @@ export const i18n = {
         op_J: '每天上午8时至午夜',
         op_A: '逢星期一至六上午8时至午夜 (星期日及公众假期除外)',
         op_B: '逢星期一至六上午8时至晚上8时 (星期日及公众假期除外)',
-        unknown: '不详'
+        unknown: '不详',
+        avgSpeed: '平均速度',
+        routeId: '路线ID',
+        initialLoadMessage: '首次加载可能需要一些时间，请稍候...'
     },
 };

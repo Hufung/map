@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import type { Map as LeafletMap } from 'leaflet';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { Map as LeafletMap, LatLngBounds } from 'leaflet';
 import type { 
     Carpark, 
     AttractionFeature, 
@@ -44,6 +44,7 @@ const App: React.FC = () => {
     const [roadNetworkData, setRoadNetworkData] = useState<RoadNetworkFeature[]>([]);
     const [trafficSpeedData, setTrafficSpeedData] = useState<TrafficSpeedInfo>({});
     const [navigationTarget, setNavigationTarget] = useState<{lat: number, lon: number} | null>(null);
+    const fetchedRoadsRef = useRef(new Set<string>());
 
     const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
         carparks: true,
@@ -72,7 +73,6 @@ const App: React.FC = () => {
                 turnRestrictions,
                 permits,
                 prohibitions,
-                roadNetwork,
                 trafficSpeeds
             ] = await Promise.all([
                 fetchCarparkData(language),
@@ -81,7 +81,6 @@ const App: React.FC = () => {
                 fetchTurnRestrictionsData(),
                 fetchPermitData(),
                 fetchProhibitionData(),
-                fetchRoadNetworkData(),
                 fetchTrafficSpeedData(),
                 fetchInitialParkingMeterStatus() // Fetches and caches status
             ]);
@@ -92,7 +91,6 @@ const App: React.FC = () => {
             setTurnRestrictionsData(turnRestrictions);
             setPermitData(permits);
             setProhibitionData(prohibitions);
-            setRoadNetworkData(roadNetwork);
             setTrafficSpeedData(trafficSpeeds);
             
         } catch (error) {
@@ -119,6 +117,28 @@ const App: React.FC = () => {
         return () => clearInterval(intervalId);
     }, []);
 
+    const handleMapViewChange = useCallback(async (bounds: LatLngBounds) => {
+        if (!bounds) return;
+        try {
+            const newFeatures = await fetchRoadNetworkData(bounds);
+            const uniqueNewFeatures = newFeatures.filter(feature => {
+                if (feature.properties?.ROUTE_ID) {
+                    const routeId = String(feature.properties.ROUTE_ID);
+                     if (!fetchedRoadsRef.current.has(routeId)) {
+                        fetchedRoadsRef.current.add(routeId);
+                        return true;
+                    }
+                }
+                return false;
+            });
+            
+            if (uniqueNewFeatures.length > 0) {
+                setRoadNetworkData(prevData => [...prevData, ...uniqueNewFeatures]);
+            }
+        } catch (error) {
+            console.error("Failed to fetch road network data on map move:", error);
+        }
+    }, []);
 
     const handleMarkerClick = useCallback((carpark: Carpark) => {
         setSelectedCarpark(carpark);
@@ -165,6 +185,7 @@ const App: React.FC = () => {
                 onMarkerClick={handleMarkerClick}
                 navigationTarget={navigationTarget}
                 onNavigationStarted={handleNavigationStarted}
+                onMapViewChange={handleMapViewChange}
             />
             
             {isLoading && <LoadingSpinner language={language} />}

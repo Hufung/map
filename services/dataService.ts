@@ -231,77 +231,53 @@ export async function fetchProhibitionData(): Promise<ProhibitionFeature[]> {
 }
 
 // --- Road Network ---
-export async function fetchRoadNetworkData(): Promise<RoadNetworkFeature[]> {
+export async function fetchRoadNetworkData(bounds: L.LatLngBounds): Promise<RoadNetworkFeature[]> {
     const baseUrl = API_ROAD_NETWORK_URL;
-    const allFeaturesMap = new Map<string, RoadNetworkFeature>();
+    const allFeatures: RoadNetworkFeature[] = [];
     const pageSize = 1000; // WFS server record limit.
 
-    // Define the 3x3 grid for Hong Kong
-    const minLat = 22.15;
-    const maxLat = 22.62;
-    const minLon = 113.81;
-    const maxLon = 114.45;
+    const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
+    const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
+    const boundsFilter = `<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
 
-    const latStep = (maxLat - minLat) / 3;
-    const lonStep = (maxLon - minLon) / 3;
+    let hasMore = true;
+    let startIndex = 0;
 
-    const districts = [];
-    for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-            districts.push({
-                lowerCorner: `${(minLat + i * latStep).toFixed(4)} ${(minLon + j * lonStep).toFixed(4)}`,
-                upperCorner: `${(minLat + (i + 1) * latStep).toFixed(4)} ${(minLon + (j + 1) * lonStep).toFixed(4)}`
-            });
-        }
-    }
-
-    // Sequentially fetch data for each district
-    for (const district of districts) {
-        let hasMore = true;
-        let startIndex = 0;
+    while (hasMore) {
+        const url = `${baseUrl}&resultOffset=${startIndex}&resultRecordCount=${pageSize}&filter=${encodeURIComponent(boundsFilter)}`;
         
-        const districtFilter = `<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${district.lowerCorner}</gml:lowerCorner><gml:upperCorner>${district.upperCorner}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
-
-        while (hasMore) {
-            const url = `${baseUrl}&resultOffset=${startIndex}&resultRecordCount=${pageSize}&filter=${encodeURIComponent(districtFilter)}`;
-            
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    console.error(`Failed to fetch road network data for district ${district.lowerCorner}. Status: ${response.status}`);
-                    hasMore = false; // Stop trying for this district on error
-                    continue; 
-                }
-                
-                const data = await response.json();
-                const features = data.features || [];
-
-                if (features.length > 0) {
-                    features.forEach((feature: RoadNetworkFeature) => {
-                        if (feature.properties && feature.properties.ROUTE_ID) {
-                            const routeId = String(feature.properties.ROUTE_ID).trim();
-                            if (routeId && !allFeaturesMap.has(routeId)) {
-                                feature.properties.ROUTE_ID = routeId;
-                                allFeaturesMap.set(routeId, feature);
-                            }
-                        }
-                    });
-                    
-                    startIndex += features.length;
-                    if (features.length < pageSize) {
-                        hasMore = false; // Last page for this district
-                    }
-                } else {
-                    hasMore = false; // No more features in this district
-                }
-            } catch (error) {
-                console.error(`An error occurred while fetching road network data for district ${district.lowerCorner}:`, error);
-                hasMore = false; // Stop trying for this district on error
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.error(`Failed to fetch road network data for bounds ${bounds.toBBoxString()}. Status: ${response.status}`);
+                throw new Error(`Failed to fetch road network data. Status: ${response.status}`);
             }
+            
+            const data = await response.json();
+            const features = data.features || [];
+
+            if (features.length > 0) {
+                 features.forEach((feature: RoadNetworkFeature) => {
+                    if (feature.properties && feature.properties.ROUTE_ID) {
+                        feature.properties.ROUTE_ID = String(feature.properties.ROUTE_ID).trim();
+                        allFeatures.push(feature);
+                    }
+                });
+                
+                startIndex += features.length;
+                if (features.length < pageSize) {
+                    hasMore = false; // Last page
+                }
+            } else {
+                hasMore = false; // No more features
+            }
+        } catch (error) {
+            console.error(`An error occurred while fetching road network data for bounds ${bounds.toBBoxString()}:`, error);
+            throw error; // Propagate error
         }
     }
     
-    return Array.from(allFeaturesMap.values());
+    return allFeatures;
 }
 
 

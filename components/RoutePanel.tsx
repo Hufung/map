@@ -4,15 +4,19 @@ import { Language } from '../types';
 import { i18n } from '../constants';
 
 // Fix: Add leaflet-routing-machine type declarations
-declare module 'leaflet' {
-    namespace Routing {
-        interface IRoute {
-            summary: {
-                totalDistance: number;
-                totalTime: number;
-            };
-            instructions: { text: string }[];
-            coordinates: L.LatLng[];
+// FIX: Use `declare global` to correctly augment the leaflet 'L' object and resolve module resolution issues.
+declare global {
+    namespace L {
+        namespace Routing {
+            interface IRoute {
+                summary: {
+                    totalDistance: number;
+                    totalTime: number;
+                };
+                instructions: { text: string }[];
+                // Fix: Namespace 'global.L' has no exported member 'LatLng'. Use `import('leaflet').LatLng` to refer to the type from the leaflet module.
+                coordinates: import('leaflet').LatLng[];
+            }
         }
     }
 }

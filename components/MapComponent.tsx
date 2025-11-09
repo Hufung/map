@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
-import type { Map as LeafletMap, LatLng, LayerGroup } from 'leaflet';
+import type { Map as LeafletMap, LatLng, LayerGroup, LatLngBounds } from 'leaflet';
 
 import {
     Carpark, AttractionFeature, ViewingPointFeature, 
@@ -16,34 +16,40 @@ import { RoutePanel } from './RoutePanel';
 import { NavigationNotification } from './NavigationNotification';
 
 // Fix: Add leaflet-routing-machine type declarations
-declare module 'leaflet' {
-    namespace Routing {
-        interface IRoute {
-            summary: {
-                totalDistance: number;
-                totalTime: number;
-            };
-            coordinates: LatLng[];
-            instructions: { text: string }[];
-        }
+// FIX: Use `declare global` to correctly augment the leaflet 'L' object and resolve module resolution issues.
+declare global {
+    namespace L {
+        namespace Routing {
+            interface IRoute {
+                summary: {
+                    totalDistance: number;
+                    totalTime: number;
+                };
+                // Fix: Namespace 'global.L' has no exported member 'LatLng'. Use `import('leaflet').LatLng` to refer to the type from the leaflet module.
+                coordinates: import('leaflet').LatLng[];
+                instructions: { text: string }[];
+            }
 
-        interface RoutingErrorEvent {
-            error: {
-                message: string;
-            };
-        }
+            interface RoutingErrorEvent {
+                error: {
+                    message: string;
+                };
+            }
 
-        interface RoutesFoundEvent {
-            routes: IRoute[];
-        }
+            interface RoutesFoundEvent {
+                routes: IRoute[];
+            }
 
-        class Control extends L.Control {
-            on(type: 'routesfound', fn: (e: RoutesFoundEvent) => void, context?: any): this;
-            on(type: 'routingerror', fn: (e: RoutingErrorEvent) => void, context?: any): this;
-            on(type: string, fn: L.LeafletEventHandlerFn, context?: any): this;
-        }
+            // Fix: Property 'Control' does not exist on type 'typeof L'. Extend from `import('leaflet').Control` to correctly reference the base Control class.
+            class Control extends import('leaflet').Control {
+                on(type: 'routesfound', fn: (e: RoutesFoundEvent) => void, context?: any): this;
+                on(type: 'routingerror', fn: (e: RoutingErrorEvent) => void, context?: any): this;
+                // Fix: Namespace 'global.L' has no exported member 'LeafletEventHandlerFn'. Use `import('leaflet').LeafletEventHandlerFn` for the event handler type.
+                on(type: string, fn: import('leaflet').LeafletEventHandlerFn, context?: any): this;
+            }
 
-        function control(options: any): Control;
+            function control(options: any): Control;
+        }
     }
 }
 
@@ -78,23 +84,24 @@ interface MapComponentProps {
     onMarkerClick: (carpark: Carpark) => void;
     navigationTarget: { lat: number, lon: number } | null;
     onNavigationStarted: () => void;
+    onMapViewChange: (bounds: LatLngBounds) => void;
 }
 
 export const MapComponent: React.FC<MapComponentProps> = ({
     setMap, language, visibleLayers, carparkData, attractionsData,
     viewingPointsData, turnRestrictionsData, permitData, prohibitionData,
     roadNetworkData, trafficSpeedData,
-    onMarkerClick, navigationTarget, onNavigationStarted
+    onMarkerClick, navigationTarget, onNavigationStarted, onMapViewChange
 }) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<LeafletMap | null>(null);
     const layersRef = useRef<{ [key: string]: LayerGroup }>({});
+    const roadLayersRef = useRef<Map<string, L.Polyline>>(new Map());
     const userLocationMarkerRef = useRef<L.Marker | null>(null);
     const routingControlRef = useRef<L.Routing.Control | null>(null);
     const positionWatchIdRef = useRef<number | null>(null);
     const warnedFeaturesRef = useRef<Set<string>>(new Set());
     const userLatLngRef = useRef<LatLng | null>(null);
-    const plotRoadsTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     
     const [currentRoute, setCurrentRoute] = useState<L.Routing.IRoute | null>(null);
     const [notification, setNotification] = useState<string>('');
@@ -272,7 +279,8 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         });
         
         map.on('popupopen', (e) => {
-            const navBtn = e.popup.getElement()?.querySelector<HTMLButtonElement>('.navigate-btn');
+            // FIX: Replace querySelector generic with a type assertion to fix "Untyped function calls may not accept type arguments" error.
+            const navBtn = e.popup.getElement()?.querySelector('.navigate-btn') as HTMLButtonElement | null;
             if(navBtn?.dataset.lat && navBtn?.dataset.lon) {
                 navBtn.onclick = () => handleNavigation(parseFloat(navBtn.dataset.lat!), parseFloat(navBtn.dataset.lon!));
             }
@@ -344,79 +352,77 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         });
     }, [prohibitionData]);
 
-    // Plot traffic speed layer progressively
+    // --- Efficient Road Network & Traffic Speed Rendering ---
+    
+    const getTrafficStyle = useCallback((routeId: string): { color: string; weight: number } => {
+        const speedInfo = trafficSpeedData[routeId];
+        // Roads with no data, or unknown status, are thinner and grey
+        if (!speedInfo || speedInfo.reliability === 0) {
+            return { color: '#888888', weight: 3 };
+        }
+        switch (speedInfo.reliability) {
+            case 1: return { color: '#28a745', weight: 4 }; // Green for Smooth
+            case 2: return { color: '#ffc107', weight: 5 }; // Yellow, thicker for Slow
+            case 3: return { color: '#dc3545', weight: 6 }; // Red, thickest for Congested
+            default: return { color: '#888888', weight: 3 };
+        }
+    }, [trafficSpeedData]);
+
+    // Effect to ADD new roads to the map
     useEffect(() => {
         const layer = layersRef.current.trafficSpeed;
-        if (!layer) return;
+        if (!layer || !mapRef.current) return;
 
-        // Clear previous layers and any ongoing plotting process
-        layer.clearLayers();
-        if (plotRoadsTimeoutRef.current) {
-            clearTimeout(plotRoadsTimeoutRef.current);
-        }
+        const newFeatures = roadNetworkData.filter(feature =>
+            feature.properties?.ROUTE_ID && !roadLayersRef.current.has(String(feature.properties.ROUTE_ID))
+        );
 
-        const getTrafficStyle = (routeId: string): { color: string; weight: number } => {
+        if (newFeatures.length === 0) return;
+
+        newFeatures.forEach(feature => {
+            const routeId = String(feature.properties.ROUTE_ID);
+            const { color, weight } = getTrafficStyle(routeId);
+            const geometry = feature.geometry;
+
+            let latLngs: L.LatLngExpression[] | L.LatLngExpression[][] = [];
+
+            if (geometry.type === 'LineString') {
+                latLngs = geometry.coordinates.map(coord => L.latLng(coord[1], coord[0]));
+            } else if (geometry.type === 'MultiLineString') {
+                latLngs = geometry.coordinates.map(line => line.map(coord => L.latLng(coord[1], coord[0])));
+            } else {
+                return;
+            }
+
+            if (latLngs.length === 0) return;
+
+            const line = L.polyline(latLngs, { color, weight, opacity: 0.85 });
+
+            const roadName = language === 'en_US' ? feature.properties.ROAD_NAME_ENG : feature.properties.ROAD_NAME_CHI;
+            let popupContent = `<strong>${roadName}</strong><br>${t.routeId}: ${routeId}`;
             const speedInfo = trafficSpeedData[routeId];
-            // Roads with no data, or unknown status, are thinner and grey
-            if (!speedInfo || speedInfo.reliability === 0) {
-                return { color: '#888888', weight: 3 }; 
+            if (speedInfo) {
+                popupContent += `<br>${t.avgSpeed}: ${speedInfo.speed} km/h`;
             }
-            switch (speedInfo.reliability) {
-                case 1: return { color: '#28a745', weight: 4 }; // Green for Smooth
-                case 2: return { color: '#ffc107', weight: 5 }; // Yellow, thicker for Slow
-                case 3: return { color: '#dc3545', weight: 6 }; // Red, thickest for Congested
-                default: return { color: '#888888', weight: 3 };
+            line.bindPopup(popupContent);
+
+            roadLayersRef.current.set(routeId, line);
+
+            // Add to map only if layer is visible
+            if (mapRef.current.hasLayer(layer)) {
+                line.addTo(layer);
             }
-        };
+        });
+    }, [roadNetworkData, language, t.routeId, t.avgSpeed, getTrafficStyle, trafficSpeedData]);
+    
+    // Effect to UPDATE road styles when speed data changes
+    useEffect(() => {
+        roadLayersRef.current.forEach((line, routeId) => {
+            const { color, weight } = getTrafficStyle(routeId);
+            line.setStyle({ color, weight });
+        });
+    }, [trafficSpeedData, getTrafficStyle]);
 
-        const plotChunk = (index = 0) => {
-            const chunkSize = 200; // Render 200 lines per chunk
-            const chunk = roadNetworkData.slice(index, index + chunkSize);
-
-            chunk.forEach(feature => {
-                const routeId = feature.properties.ROUTE_ID;
-                const speedInfo = trafficSpeedData[routeId];
-                const { color, weight } = getTrafficStyle(routeId);
-                const geometry = feature.geometry;
-
-                let latLngs: L.LatLngExpression[] | L.LatLngExpression[][] = [];
-
-                if (geometry.type === 'LineString') {
-                    latLngs = geometry.coordinates.map(coord => L.latLng(coord[1], coord[0]));
-                } else if (geometry.type === 'MultiLineString') {
-                    latLngs = geometry.coordinates.map(line => line.map(coord => L.latLng(coord[1], coord[0])));
-                } else {
-                    return; 
-                }
-                
-                if (latLngs.length === 0) return;
-                
-                const line = L.polyline(latLngs, { color, weight, opacity: 0.85 }).addTo(layer);
-
-                const roadName = language === 'en_US' ? feature.properties.ROAD_NAME_ENG : feature.properties.ROAD_NAME_CHI;
-                let popupContent = `<strong>${roadName}</strong><br>${t.routeId}: ${routeId}`;
-                if (speedInfo) {
-                    popupContent += `<br>${t.avgSpeed}: ${speedInfo.speed} km/h`;
-                }
-                line.bindPopup(popupContent);
-            });
-
-            // If there are more chunks to plot, schedule the next one
-            if (index + chunkSize < roadNetworkData.length) {
-                plotRoadsTimeoutRef.current = window.setTimeout(() => plotChunk(index + chunkSize), 20);
-            }
-        };
-
-        plotChunk();
-
-        // Cleanup function to clear timeout if component unmounts or dependencies change
-        return () => {
-            if (plotRoadsTimeoutRef.current) {
-                clearTimeout(plotRoadsTimeoutRef.current);
-            }
-        };
-
-    }, [roadNetworkData, trafficSpeedData, language, t.routeId, t.avgSpeed]);
 
     // Plot other features
     useEffect(() => {
@@ -536,11 +542,12 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             clearTimeout(moveEndTimer);
             moveEndTimer = window.setTimeout(() => {
                 if(visibleLayers.parkingMeters) plotParkingMeters();
+                if(visibleLayers.trafficSpeed) onMapViewChange(map.getBounds());
             }, 500);
         };
         map.on('moveend', onMoveEnd);
         return () => { map.off('moveend', onMoveEnd); clearTimeout(moveEndTimer); }
-    }, [visibleLayers.parkingMeters, plotParkingMeters]);
+    }, [visibleLayers.parkingMeters, visibleLayers.trafficSpeed, plotParkingMeters, onMapViewChange]);
 
     // Manage Layer Visibility
     useEffect(() => {
@@ -549,12 +556,18 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         Object.entries(visibleLayers).forEach(([key, isVisible]) => {
             const layer = layersRef.current[key];
             if (layer) {
-                if (isVisible && !map.hasLayer(layer)) map.addLayer(layer);
+                if (isVisible && !map.hasLayer(layer)) {
+                    map.addLayer(layer);
+                     // If traffic layer is added and no data has been fetched, fetch it.
+                    if (key === 'trafficSpeed' && roadNetworkData.length === 0) {
+                        onMapViewChange(map.getBounds());
+                    }
+                }
                 else if (!isVisible && map.hasLayer(layer)) map.removeLayer(layer);
             }
         });
         if(visibleLayers.parkingMeters) plotParkingMeters();
-    }, [visibleLayers, plotParkingMeters]);
+    }, [visibleLayers, plotParkingMeters, onMapViewChange, roadNetworkData.length]);
 
     // Navigation mode effect
     useEffect(() => {

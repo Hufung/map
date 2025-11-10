@@ -35,7 +35,7 @@ export const LayerControl: React.FC<LayerControlProps> = ({ language, visibleLay
     };
 
     return (
-        <div className="absolute top-4 left-4 z-[1000] bg-white p-3 rounded-lg shadow-md space-y-2">
+        <div className="absolute top-20 left-4 z-[1000] bg-white p-3 rounded-lg shadow-md space-y-2">
             <Checkbox
                 label={t.toggleCarParks}
                 checked={visibleLayers.carparks}
@@ -52,9 +52,39 @@ export const LayerControl: React.FC<LayerControlProps> = ({ language, visibleLay
                 onChange={(c) => handleChange('viewingPoints', c)}
             />
             <Checkbox
+                label={t.toggleEVChargers}
+                checked={visibleLayers.evChargers}
+                onChange={(c) => handleChange('evChargers', c)}
+            />
+            <Checkbox
                 label={t.toggleParkingMeters}
                 checked={visibleLayers.parkingMeters}
                 onChange={(c) => handleChange('parkingMeters', c)}
+            />
+             <Checkbox
+                label={t.toggleOilStations}
+                checked={visibleLayers.oilStations}
+                onChange={(c) => handleChange('oilStations', c)}
+            />
+             <Checkbox
+                label={t.togglePermits}
+                checked={visibleLayers.permits}
+                onChange={(c) => handleChange('permits', c)}
+            />
+            <Checkbox
+                label={t.toggleProhibitions}
+                checked={visibleLayers.prohibitions}
+                onChange={(c) => handleChange('prohibitions', c)}
+            />
+            <Checkbox
+                label={t.toggleTurnRestrictions}
+                checked={visibleLayers.turnRestrictions}
+                onChange={(c) => handleChange('turnRestrictions', c)}
+            />
+            <Checkbox
+                label={t.toggleTrafficFeatures}
+                checked={visibleLayers.trafficFeatures}
+                onChange={(c) => handleChange('trafficFeatures', c)}
             />
             <Checkbox
                 label={t.toggleTrafficSpeed}

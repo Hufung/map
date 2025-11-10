@@ -3,23 +3,8 @@ import L from 'leaflet';
 import { Language } from '../types';
 import { i18n } from '../constants';
 
-// Fix: Add leaflet-routing-machine type declarations
-// FIX: Use `declare global` to correctly augment the leaflet 'L' object and resolve module resolution issues.
-declare global {
-    namespace L {
-        namespace Routing {
-            interface IRoute {
-                summary: {
-                    totalDistance: number;
-                    totalTime: number;
-                };
-                instructions: { text: string }[];
-                // Fix: Namespace 'global.L' has no exported member 'LatLng'. Use `import('leaflet').LatLng` to refer to the type from the leaflet module.
-                coordinates: import('leaflet').LatLng[];
-            }
-        }
-    }
-}
+// Fix: Removed leaflet module augmentation. The types from leaflet-routing-machine are available globally
+// and the augmentation was causing redeclaration errors.
 
 interface RoutePanelProps {
     // Fix: Use L.Routing.IRoute as the correct type for a route object.

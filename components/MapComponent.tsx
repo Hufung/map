@@ -4,54 +4,19 @@ import 'leaflet-routing-machine';
 import type { Map as LeafletMap, LatLng, LayerGroup, LatLngBounds } from 'leaflet';
 
 import {
-    Carpark, AttractionFeature, ViewingPointFeature, 
+    Carpark, AttractionFeature, ViewingPointFeature, EVChargerFeature,
     TurnRestrictionFeature, TrafficFeature, PermitFeature, ProhibitionFeature, 
     RoadNetworkFeature, TrafficSpeedInfo,
-    Language, VisibleLayers, GroupedParkingMeter
+    Language, VisibleLayers, GroupedParkingMeter, OilStation
 } from '../types';
 import { i18n } from '../constants';
-import { fetchParkingMetersInBounds, getCachedParkingMeterStatus, fetchTrafficFeaturesNearby } from '../services/dataService';
-import { createCarparkIcon, createAttractionIcon, createViewingPointIcon, createParkingMeterIcon, createTurnRestrictionIcon, createTrafficFeatureIcon, createPermitIcon, createProhibitionIcon } from './MapIcons';
+import { fetchParkingMetersInBounds, getCachedParkingMeterStatus, fetchTrafficFeaturesInBounds } from '../services/dataService';
+import { createCarparkIcon, createAttractionIcon, createViewingPointIcon, createEVChargerIcon, createParkingMeterIcon, createTurnRestrictionIcon, createTrafficFeatureIcon, createPermitIcon, createProhibitionIcon, createOilStationIcon } from './MapIcons';
 import { RoutePanel } from './RoutePanel';
 import { NavigationNotification } from './NavigationNotification';
 
-// Fix: Add leaflet-routing-machine type declarations
-// FIX: Use `declare global` to correctly augment the leaflet 'L' object and resolve module resolution issues.
-declare global {
-    namespace L {
-        namespace Routing {
-            interface IRoute {
-                summary: {
-                    totalDistance: number;
-                    totalTime: number;
-                };
-                // Fix: Namespace 'global.L' has no exported member 'LatLng'. Use `import('leaflet').LatLng` to refer to the type from the leaflet module.
-                coordinates: import('leaflet').LatLng[];
-                instructions: { text: string }[];
-            }
-
-            interface RoutingErrorEvent {
-                error: {
-                    message: string;
-                };
-            }
-
-            interface RoutesFoundEvent {
-                routes: IRoute[];
-            }
-
-            // Fix: Property 'Control' does not exist on type 'typeof L'. Extend from `import('leaflet').Control` to correctly reference the base Control class.
-            class Control extends import('leaflet').Control {
-                on(type: 'routesfound', fn: (e: RoutesFoundEvent) => void, context?: any): this;
-                on(type: 'routingerror', fn: (e: RoutingErrorEvent) => void, context?: any): this;
-                // Fix: Namespace 'global.L' has no exported member 'LeafletEventHandlerFn'. Use `import('leaflet').LeafletEventHandlerFn` for the event handler type.
-                on(type: string, fn: import('leaflet').LeafletEventHandlerFn, context?: any): this;
-            }
-
-            function control(options: any): Control;
-        }
-    }
-}
+// Fix: Removed leaflet module augmentation. The types from leaflet-routing-machine are available globally
+// and the augmentation was causing redeclaration errors.
 
 // Fix for default Leaflet icon path issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -76,22 +41,25 @@ interface MapComponentProps {
     carparkData: Carpark[];
     attractionsData: AttractionFeature[];
     viewingPointsData: ViewingPointFeature[];
+    evChargerData: EVChargerFeature[];
     turnRestrictionsData: TurnRestrictionFeature[];
     permitData: PermitFeature[];
     prohibitionData: ProhibitionFeature[];
     roadNetworkData: RoadNetworkFeature[];
     trafficSpeedData: TrafficSpeedInfo;
+    oilStationData: OilStation[];
     onMarkerClick: (carpark: Carpark) => void;
     navigationTarget: { lat: number, lon: number } | null;
     onNavigationStarted: () => void;
     onMapViewChange: (bounds: LatLngBounds) => void;
+    searchResultBounds: LatLngBounds | null;
 }
 
 export const MapComponent: React.FC<MapComponentProps> = ({
     setMap, language, visibleLayers, carparkData, attractionsData,
-    viewingPointsData, turnRestrictionsData, permitData, prohibitionData,
-    roadNetworkData, trafficSpeedData,
-    onMarkerClick, navigationTarget, onNavigationStarted, onMapViewChange
+    viewingPointsData, evChargerData, turnRestrictionsData, permitData, prohibitionData,
+    roadNetworkData, trafficSpeedData, oilStationData,
+    onMarkerClick, navigationTarget, onNavigationStarted, onMapViewChange, searchResultBounds
 }) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<LeafletMap | null>(null);
@@ -101,11 +69,9 @@ export const MapComponent: React.FC<MapComponentProps> = ({
     const routingControlRef = useRef<L.Routing.Control | null>(null);
     const positionWatchIdRef = useRef<number | null>(null);
     const warnedFeaturesRef = useRef<Set<string>>(new Set());
-    const userLatLngRef = useRef<LatLng | null>(null);
     
     const [currentRoute, setCurrentRoute] = useState<L.Routing.IRoute | null>(null);
     const [notification, setNotification] = useState<string>('');
-    const [localTrafficFeatures, setLocalTrafficFeatures] = useState<TrafficFeature[]>([]);
 
     const t = i18n[language];
     
@@ -166,38 +132,20 @@ export const MapComponent: React.FC<MapComponentProps> = ({
 
     // Proximity alerts during navigation
     const checkProximityAlerts = useCallback((userLatLng: LatLng) => {
-        const combinedFeatures: (TrafficFeature | TurnRestrictionFeature)[] = [
-            ...localTrafficFeatures, 
-            ...turnRestrictionsData
-        ];
-
-        combinedFeatures.forEach(feature => {
-            const id = 'GmlID' in feature.properties ? feature.properties.GmlID : feature.properties.name;
+        turnRestrictionsData.forEach(feature => {
+            const id = feature.properties.name;
             if (warnedFeaturesRef.current.has(id)) return;
 
             const [lon, lat] = feature.geometry.coordinates;
             const featureLatLng = L.latLng(lat, lon);
 
             if (userLatLng.distanceTo(featureLatLng) < 10) { // 10m proximity
-                let message = '';
-                if('FEATURE_TYPE' in feature.properties) {
-                    switch (feature.properties.FEATURE_TYPE) {
-                        case 1: message = t.zebraCrossing; break;
-                        case 2: message = t.yellowBox; break;
-                        case 3: message = t.tollPlaza; break;
-                        case 4: message = t.culDeSac; break;
-                    }
-                } else if ('name' in feature.properties) {
-                    message = `${t.turnRestrictionWarning}: ${feature.properties.name}`;
-                }
-
-                if (message) {
-                    showNotification(message);
-                    warnedFeaturesRef.current.add(id);
-                }
+                const message = `${t.turnRestrictionWarning}: ${feature.properties.name}`;
+                showNotification(message);
+                warnedFeaturesRef.current.add(id);
             }
         });
-    }, [localTrafficFeatures, turnRestrictionsData, t, showNotification]);
+    }, [turnRestrictionsData, t.turnRestrictionWarning, showNotification]);
 
     const handleNavigation = useCallback((lat: number, lon: number) => {
         const map = mapRef.current;
@@ -245,7 +193,12 @@ export const MapComponent: React.FC<MapComponentProps> = ({
     useEffect(() => {
         if (mapRef.current || !mapContainerRef.current) return;
 
-        const map = L.map(mapContainerRef.current).setView([22.3193, 114.1694], 12);
+        const map = L.map(mapContainerRef.current, {
+            zoomControl: false // Disable default zoom control
+        }).setView([22.3193, 114.1694], 12);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
         L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/wgs84/{z}/{x}/{y}.png', {
             attribution: '<a href="https://api.portal.hkmapservice.gov.hk/disclaimer" target="_blank">&copy; Map info from Lands Dept.</a>',
             maxZoom: 20, minZoom: 3
@@ -255,10 +208,13 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             carparks: L.layerGroup().addTo(map),
             attractions: L.layerGroup(),
             viewingPoints: L.layerGroup(),
+            evChargers: L.layerGroup(),
             parkingMeters: L.layerGroup(),
+            oilStations: L.layerGroup(),
             permits: L.layerGroup(),
             prohibitions: L.layerGroup(),
-            trafficFeatures: L.layerGroup().addTo(map),
+            trafficFeatures: L.layerGroup(),
+            turnRestrictions: L.layerGroup(),
             routeTurnRestrictions: L.layerGroup(),
             trafficSpeed: L.layerGroup(),
         };
@@ -266,16 +222,13 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         mapRef.current = map;
         setMap(map);
         
-        map.on('locationfound', async (e) => {
-            userLatLngRef.current = e.latlng;
+        map.on('locationfound', (e) => {
             if (userLocationMarkerRef.current) {
                 userLocationMarkerRef.current.setLatLng(e.latlng);
             } else {
                 userLocationMarkerRef.current = L.marker(e.latlng).addTo(map)
                     .bindPopup(t.userLocationPopup.replace('{accuracy}', e.accuracy.toFixed(0)));
             }
-            const features = await fetchTrafficFeaturesNearby(e.latlng);
-            setLocalTrafficFeatures(features);
         });
         
         map.on('popupopen', (e) => {
@@ -287,20 +240,16 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    
-    // Effect to plot traffic features when they are fetched
+
+    // Effect to handle zooming to search results
     useEffect(() => {
-        const layer = layersRef.current.trafficFeatures;
-        if (!layer || !mapRef.current) return;
-    
-        layer.clearLayers();
-    
-        localTrafficFeatures.forEach(feature => {
-            const [lon, lat] = feature.geometry.coordinates;
-            const icon = createTrafficFeatureIcon(feature.properties.FEATURE_TYPE);
-            L.marker(L.latLng(lat, lon), { icon }).addTo(layer);
-        });
-    }, [localTrafficFeatures]);
+        const map = mapRef.current;
+        if (map && searchResultBounds) {
+            if (searchResultBounds.isValid()) {
+                map.fitBounds(searchResultBounds, { padding: [50, 50], maxZoom: 16 });
+            }
+        }
+    }, [searchResultBounds]);
 
     // Trigger navigation from parent
     useEffect(() => {
@@ -323,6 +272,96 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             }
         });
     }, [carparkData, onMarkerClick]);
+
+    // Plot EV Chargers
+    useEffect(() => {
+        const layer = layersRef.current.evChargers;
+        if (!layer) return;
+        layer.clearLayers();
+        const icon = createEVChargerIcon();
+        
+        const locationKey = language === 'en_US' ? 'LOCATION_EN' : (language === 'zh_TW' ? 'LOCATION_TC' : 'LOCATION_SC');
+        const addressKey = language === 'en_US' ? 'ADDRESS_EN' : (language === 'zh_TW' ? 'ADDRESS_TC' : 'ADDRESS_SC');
+
+        evChargerData.forEach(feature => {
+            const [lon, lat] = feature.geometry.coordinates;
+            const p = feature.properties;
+
+            const chargerCounts = {
+                'Standard (BS1363)': p.STANDARD_BS1363_no,
+                'Medium (IEC62196)': p.MEDIUM_IEC62196_no,
+                'Medium (SAEJ1772)': p.MEDIUM_SAEJ1772_no,
+                'Medium (Others)': p.MEDIUM_OTHERS_no,
+                'Quick (CHAdeMO)': p.QUICK_CHAdeMO_no,
+                'Quick (CCS DC Combo)': p.QUICK_CCS_DC_COMBO_no,
+                'Quick (IEC62196)': p.QUICK_IEC62196_no,
+                'Quick (GB/T)': p.QUICK_GB_T20234_3_DC__no,
+                'Quick (Others)': p.QUICK_OTHERS_no,
+            };
+
+            const chargerList = Object.entries(chargerCounts)
+                .filter(([, count]) => count > 0)
+                .map(([type, count]) => `<li class="ml-4 list-disc">${type}: <strong>${count}</strong></li>`)
+                .join('');
+
+            const pop = `
+                <div class="text-sm w-64">
+                    <div class="font-bold text-base mb-1">${p[locationKey]}</div>
+                    <div class="mb-2 text-xs text-gray-600">${p[addressKey]}</div>
+                    <hr class="my-1">
+                    ${chargerList ? `<div class="mt-2"><span class="font-semibold">${t.charger_types}:</span><ul class="list-none pl-0 mt-1">${chargerList}</ul></div>` : ''}
+                    <button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${lat}" data-lon="${lon}">${t.navigate}</button>
+                </div>
+            `;
+            L.marker([lat, lon], { icon }).addTo(layer).bindPopup(pop, { maxWidth: 300 });
+        });
+    }, [evChargerData, language, t.charger_types, t.navigate]);
+
+    // Plot Oil Stations
+    useEffect(() => {
+        const layer = layersRef.current.oilStations;
+        if (!layer) return;
+        layer.clearLayers();
+        
+        oilStationData.forEach(station => {
+            if (station.Latitude && station.Longitude) {
+                const icon = createOilStationIcon(station.Brand);
+                const prices = [
+                    { label: t.diesel, price: station.Diesel },
+                    { label: t.super, price: station.Super },
+                    { label: t.premium, price: station.Premium }
+                ]
+                .filter(p => p.price && p.price !== '-')
+                .map(p => `<li class="ml-4 list-disc">${p.label}: <strong>$${p.price}</strong></li>`)
+                .join('');
+
+                const pop = `
+                    <div class="text-sm w-64">
+                        <div class="font-bold text-base mb-1">${station.Name}</div>
+                        <div class="text-xs text-gray-600">${station.Address}</div>
+                        <div class="text-xs text-gray-500">Brand: ${station.Brand}</div>
+                        <hr class="my-1">
+                        ${prices ? `<div class="mt-2"><ul class="list-none pl-0 mt-1">${prices}</ul></div>` : ''}
+                        <button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${station.Latitude}" data-lon="${station.Longitude}">${t.navigate}</button>
+                    </div>
+                `;
+                L.marker([station.Latitude, station.Longitude], { icon }).addTo(layer).bindPopup(pop, { maxWidth: 300 });
+            }
+        });
+    }, [oilStationData, language, t.diesel, t.super, t.premium, t.navigate]);
+
+    // Plot Turn Restrictions
+    useEffect(() => {
+        const layer = layersRef.current.turnRestrictions;
+        if (!layer) return;
+        layer.clearLayers();
+        const icon = createTurnRestrictionIcon();
+        turnRestrictionsData.forEach(feature => {
+            const [lon, lat] = feature.geometry.coordinates;
+            const pop = `<strong>${t.turnRestrictionWarning}</strong><br>${feature.properties.name}`;
+            L.marker([lat, lon], { icon }).addTo(layer).bindPopup(pop);
+        });
+    }, [turnRestrictionsData, t.turnRestrictionWarning]);
 
     // Plot Permits
     useEffect(() => {
@@ -533,6 +572,24 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         });
     }, [language, t]);
 
+    const plotTrafficFeatures = useCallback(async () => {
+        const map = mapRef.current;
+        if (!map) return;
+        const layer = layersRef.current.trafficFeatures;
+        layer.clearLayers();
+    
+        try {
+            const features = await fetchTrafficFeaturesInBounds(map.getBounds());
+            features.forEach(feature => {
+                const [lon, lat] = feature.geometry.coordinates;
+                const icon = createTrafficFeatureIcon(feature.properties.FEATURE_TYPE);
+                L.marker(L.latLng(lat, lon), { icon }).addTo(layer);
+            });
+        } catch (error) {
+            console.error("Failed to plot traffic features:", error);
+        }
+    }, []);
+
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
@@ -543,11 +600,12 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             moveEndTimer = window.setTimeout(() => {
                 if(visibleLayers.parkingMeters) plotParkingMeters();
                 if(visibleLayers.trafficSpeed) onMapViewChange(map.getBounds());
+                if(visibleLayers.trafficFeatures) plotTrafficFeatures();
             }, 500);
         };
         map.on('moveend', onMoveEnd);
         return () => { map.off('moveend', onMoveEnd); clearTimeout(moveEndTimer); }
-    }, [visibleLayers.parkingMeters, visibleLayers.trafficSpeed, plotParkingMeters, onMapViewChange]);
+    }, [visibleLayers, plotParkingMeters, onMapViewChange, plotTrafficFeatures]);
 
     // Manage Layer Visibility
     useEffect(() => {
@@ -562,12 +620,15 @@ export const MapComponent: React.FC<MapComponentProps> = ({
                     if (key === 'trafficSpeed' && roadNetworkData.length === 0) {
                         onMapViewChange(map.getBounds());
                     }
+                    if (key === 'trafficFeatures') {
+                        plotTrafficFeatures();
+                    }
                 }
                 else if (!isVisible && map.hasLayer(layer)) map.removeLayer(layer);
             }
         });
         if(visibleLayers.parkingMeters) plotParkingMeters();
-    }, [visibleLayers, plotParkingMeters, onMapViewChange, roadNetworkData.length]);
+    }, [visibleLayers, plotParkingMeters, onMapViewChange, roadNetworkData.length, plotTrafficFeatures]);
 
     // Navigation mode effect
     useEffect(() => {

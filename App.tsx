@@ -1,27 +1,31 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Map as LeafletMap, LatLngBounds } from 'leaflet';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import L, { type Map as LeafletMap, LatLngBounds } from 'leaflet';
 import type { 
     Carpark, 
     AttractionFeature, 
     ViewingPointFeature, 
+    EVChargerFeature,
     TurnRestrictionFeature, 
     PermitFeature,
     ProhibitionFeature,
     RoadNetworkFeature,
     TrafficSpeedInfo,
     Language,
-    VisibleLayers
+    VisibleLayers,
+    OilStation
 } from './types';
 import { 
     fetchCarparkData, 
     fetchAttractionsData, 
     fetchViewingPointsData, 
+    fetchEVChargerData,
     fetchInitialParkingMeterStatus,
     fetchTurnRestrictionsData,
     fetchPermitData,
     fetchProhibitionData,
     fetchRoadNetworkData,
     fetchTrafficSpeedData,
+    fetchOilStationsData,
 } from './services/dataService';
 
 import { MapComponent } from './components/MapComponent';
@@ -30,6 +34,28 @@ import { LayerControl } from './components/LayerControl';
 import { InfoModal } from './components/InfoModal';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { Legend } from './components/Legend';
+import { i18n } from './constants';
+
+const TILE_FETCH_THRESHOLD = 0.1; // degrees. If bounds are larger, subdivide.
+
+const subdivideBounds = (bounds: LatLngBounds): LatLngBounds[] => {
+    const north = bounds.getNorth();
+    const south = bounds.getSouth();
+    const east = bounds.getEast();
+    const west = bounds.getWest();
+
+    const midLat = (north + south) / 2;
+    const midLng = (east + west) / 2;
+
+    // NW, NE, SW, SE
+    return [
+        L.latLngBounds(L.latLng(midLat, west), L.latLng(north, midLng)),
+        L.latLngBounds(L.latLng(midLat, midLng), L.latLng(north, east)),
+        L.latLngBounds(L.latLng(south, west), L.latLng(midLat, midLng)),
+        L.latLngBounds(L.latLng(south, midLng), L.latLng(midLat, east)),
+    ];
+};
+
 
 const App: React.FC = () => {
     const [map, setMap] = useState<LeafletMap | null>(null);
@@ -38,22 +64,32 @@ const App: React.FC = () => {
     const [carparkData, setCarparkData] = useState<Carpark[]>([]);
     const [attractionsData, setAttractionsData] = useState<AttractionFeature[]>([]);
     const [viewingPointsData, setViewingPointsData] = useState<ViewingPointFeature[]>([]);
+    const [evChargerData, setEVChargerData] = useState<EVChargerFeature[]>([]);
     const [turnRestrictionsData, setTurnRestrictionsData] = useState<TurnRestrictionFeature[]>([]);
     const [permitData, setPermitData] = useState<PermitFeature[]>([]);
     const [prohibitionData, setProhibitionData] = useState<ProhibitionFeature[]>([]);
     const [roadNetworkData, setRoadNetworkData] = useState<RoadNetworkFeature[]>([]);
     const [trafficSpeedData, setTrafficSpeedData] = useState<TrafficSpeedInfo>({});
+    const [oilStationData, setOilStationData] = useState<OilStation[]>([]);
     const [navigationTarget, setNavigationTarget] = useState<{lat: number, lon: number} | null>(null);
     const fetchedRoadsRef = useRef(new Set<string>());
+    const isFetchingRoadsRef = useRef(false);
+
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [searchResultBounds, setSearchResultBounds] = useState<L.LatLngBounds | null>(null);
 
     const [visibleLayers, setVisibleLayers] = useState<VisibleLayers>({
         carparks: true,
         attractions: false,
         viewingPoints: false,
+        evChargers: false,
         parkingMeters: false,
+        oilStations: true,
         permits: true,
         prohibitions: true,
         trafficSpeed: false,
+        turnRestrictions: false,
+        trafficFeatures: false,
     });
     
     const [selectedCarpark, setSelectedCarpark] = useState<Carpark | null>(null);
@@ -70,28 +106,34 @@ const App: React.FC = () => {
                 carparks,
                 attractions, 
                 viewingPoints,
+                evChargers,
                 turnRestrictions,
                 permits,
                 prohibitions,
-                trafficSpeeds
+                trafficSpeeds,
+                oilStations
             ] = await Promise.all([
                 fetchCarparkData(language),
                 fetchAttractionsData(),
                 fetchViewingPointsData(),
+                fetchEVChargerData(),
                 fetchTurnRestrictionsData(),
                 fetchPermitData(),
                 fetchProhibitionData(),
                 fetchTrafficSpeedData(),
+                fetchOilStationsData(language),
                 fetchInitialParkingMeterStatus() // Fetches and caches status
             ]);
 
             setCarparkData(carparks);
             setAttractionsData(attractions);
             setViewingPointsData(viewingPoints);
+            setEVChargerData(evChargers);
             setTurnRestrictionsData(turnRestrictions);
             setPermitData(permits);
             setProhibitionData(prohibitions);
             setTrafficSpeedData(trafficSpeeds);
+            setOilStationData(oilStations);
             
         } catch (error) {
             console.error("Failed to load initial data:", error);
@@ -117,11 +159,66 @@ const App: React.FC = () => {
         return () => clearInterval(intervalId);
     }, []);
 
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+        if (!query) {
+            setSearchResultBounds(null);
+            return;
+        }
+
+        const results = carparkData.filter(cp =>
+            (cp.name && cp.name.toLowerCase().includes(query.toLowerCase())) ||
+            (cp.displayAddress && cp.displayAddress.toLowerCase().includes(query.toLowerCase()))
+        );
+
+        if (results.length > 0) {
+            const bounds = L.latLngBounds(results.map(cp => [cp.latitude, cp.longitude]));
+            setSearchResultBounds(bounds);
+        } else {
+            setSearchResultBounds(null);
+            alert(i18n[language].noResults);
+        }
+    };
+
+    const displayedCarparks = useMemo(() => {
+        if (!searchQuery) {
+            return carparkData;
+        }
+        return carparkData.filter(cp =>
+            (cp.name && cp.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (cp.displayAddress && cp.displayAddress.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+    }, [searchQuery, carparkData]);
+
+
     const handleMapViewChange = useCallback(async (bounds: LatLngBounds) => {
-        if (!bounds) return;
+        if (!bounds || isFetchingRoadsRef.current) return;
+    
+        isFetchingRoadsRef.current = true;
         try {
-            const newFeatures = await fetchRoadNetworkData(bounds);
-            const uniqueNewFeatures = newFeatures.filter(feature => {
+            const boundsToFetch: LatLngBounds[] = [];
+            const width = bounds.getEast() - bounds.getWest();
+            const height = bounds.getNorth() - bounds.getSouth();
+    
+            if (width > TILE_FETCH_THRESHOLD || height > TILE_FETCH_THRESHOLD) {
+                boundsToFetch.push(...subdivideBounds(bounds));
+            } else {
+                boundsToFetch.push(bounds);
+            }
+    
+            const fetchPromises = boundsToFetch.map(b => fetchRoadNetworkData(b));
+            const results = await Promise.allSettled(fetchPromises);
+            
+            const allNewFeatures: RoadNetworkFeature[] = [];
+            results.forEach(result => {
+                if (result.status === 'fulfilled') {
+                    allNewFeatures.push(...result.value);
+                } else {
+                    console.error("A road network tile failed to load:", result.reason);
+                }
+            });
+    
+            const uniqueNewFeatures = allNewFeatures.filter(feature => {
                 if (feature.properties?.ROUTE_ID) {
                     const routeId = String(feature.properties.ROUTE_ID);
                      if (!fetchedRoadsRef.current.has(routeId)) {
@@ -136,7 +233,9 @@ const App: React.FC = () => {
                 setRoadNetworkData(prevData => [...prevData, ...uniqueNewFeatures]);
             }
         } catch (error) {
-            console.error("Failed to fetch road network data on map move:", error);
+            console.error("An unexpected error occurred in handleMapViewChange:", error);
+        } finally {
+            isFetchingRoadsRef.current = false;
         }
     }, []);
 
@@ -162,6 +261,7 @@ const App: React.FC = () => {
                 language={language}
                 onLanguageChange={handleLanguageChange}
                 onLocateUser={() => map?.locate({ setView: true, maxZoom: 16 })}
+                onSearch={handleSearch}
             />
             <LayerControl
                 language={language}
@@ -174,18 +274,21 @@ const App: React.FC = () => {
                 setMap={setMap}
                 language={language}
                 visibleLayers={visibleLayers}
-                carparkData={carparkData}
+                carparkData={displayedCarparks}
                 attractionsData={attractionsData}
                 viewingPointsData={viewingPointsData}
+                evChargerData={evChargerData}
                 turnRestrictionsData={turnRestrictionsData}
                 permitData={permitData}
                 prohibitionData={prohibitionData}
                 roadNetworkData={roadNetworkData}
                 trafficSpeedData={trafficSpeedData}
+                oilStationData={oilStationData}
                 onMarkerClick={handleMarkerClick}
                 navigationTarget={navigationTarget}
                 onNavigationStarted={handleNavigationStarted}
                 onMapViewChange={handleMapViewChange}
+                searchResultBounds={searchResultBounds}
             />
             
             {isLoading && <LoadingSpinner language={language} />}

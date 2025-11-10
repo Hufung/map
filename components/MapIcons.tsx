@@ -31,10 +31,49 @@ export const ViewingPointSVG = () => (
 );
 export const createViewingPointIcon = () => createIcon('flex items-center justify-center bg-amber-500 rounded-full border-2 border-white shadow-lg', <ViewingPointSVG />, [28,28]);
 
+export const EVSVG = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+        <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+    </svg>
+);
+export const createEVChargerIcon = () => createIcon('flex items-center justify-center bg-teal-500 rounded-full border-2 border-white shadow-lg p-1', <EVSVG />, [28, 28]);
+
 export const ParkingMeterSVG = () => (
     <svg viewBox="0 0 20 20" className="w-5 h-5 fill-white"><path d="M18.9 6.2c-.4-.5-1-.8-1.7-.8H2.8c-.7 0-1.3.3-1.7.8c-.4.5-.6 1.1-.6 1.7v6.2c0 .6.2 1.2.6 1.7c.4.5 1 .8 1.7.8h.6c.4 0 .7.3.7.7v.7c0 .4.3.7.7.7h1.4c.4 0 .7-.3.7-.7v-.7c0-.4.3-.7.7-.7h7.2c.4 0 .7.3.7.7v.7c0 .4.3.7.7.7h1.4c.4 0 .7-.3.7-.7v-.7c0-.4.3-.7.7-.7h.6c.7 0 1.3-.3 1.7-.8c.4-.5.6-1.1.6-1.7V7.9c0-.6-.2-1.2-.6-1.7zM3.9 13.1c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4s1.4.6 1.4 1.4s-.6 1.4-1.4 1.4zm12.2 0c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4s1.4.6 1.4 1.4s-.6 1.4-1.4 1.4zM18 9H2V7.9c0-.1 0-.2.1-.3l.1-.1h15.6c.1 0 .2 0 .3.1l.1.3V9z"/></svg>
 );
 export const createParkingMeterIcon = () => createIcon('flex items-center justify-center bg-purple-500 rounded-full border-2 border-white shadow-lg', <ParkingMeterSVG />, [28,28]);
+
+export const OilStationSVG = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-white">
+        <path d="M14 11h2v8h-2zM9 5c-1.1 0-2 .9-2 2v9h2V7h1V5H9zm9 0H12v2h3.5c.83 0 1.5.67 1.5 1.5V11h-2V8.5c0-.28-.22-.5-.5-.5H12v2h3v1.5c0 .83-.67 1.5-1.5 1.5H12v2h1.5c1.93 0 3.5-1.57 3.5-3.5V7c0-1.1-.9-2-2-2z"/>
+    </svg>
+);
+
+export const createOilStationIcon = (brand: string = '') => {
+    let bgColor = 'bg-gray-700';
+    let content: React.ReactElement = <OilStationSVG />;
+    const normalizedBrand = brand.toUpperCase();
+
+    if (normalizedBrand.includes('SHELL')) {
+        bgColor = 'bg-red-600';
+        content = <strong className="text-yellow-400 text-xl font-bold">S</strong>;
+    } else if (normalizedBrand.includes('ESSO')) {
+        bgColor = 'bg-blue-600';
+        content = <strong className="text-red-500 text-xl font-bold">E</strong>;
+    } else if (normalizedBrand.includes('CALTEX')) {
+        bgColor = 'bg-red-600';
+        content = <strong className="text-white text-xl font-bold">C</strong>;
+    } else if (normalizedBrand.includes('SINOPEC')) {
+        bgColor = 'bg-red-700';
+        content = <strong className="text-white text-lg font-bold">中</strong>;
+    } else if (normalizedBrand.includes('PETROCHINA')) {
+        bgColor = 'bg-yellow-400';
+        content = <strong className="text-red-600 text-xl font-bold">P</strong>;
+    }
+    
+    const className = `flex items-center justify-center ${bgColor} rounded-full border-2 border-white shadow-lg`;
+    return createIcon(className, content, [28, 28]);
+};
 
 export const PermitSVG = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">

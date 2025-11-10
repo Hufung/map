@@ -4,6 +4,7 @@ export const API_INFO_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacanc
 export const API_VACANCY_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=vacancy';
 export const API_ATTRACTIONS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1728896853370_57183/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Attractions_in_Country_Parks&outputFormat=geojson`;
 export const API_VIEWING_POINTS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635142967951_6079/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Viewing_Point&outputFormat=geojson&maxFeatures=100`;
+export const API_EV_CHARGERS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/epd_rcd_1631080339740_69941/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=geotagging&outputFormat=geojson`;
 export const API_PARKING_METERS_BASE_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638930345315_81787/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=parkingspaces&outputFormat=geojson&srsName=EPSG:4326`;
 export const API_PARKING_METERS_STATUS_URL = `${CORS_PROXY}https://resource.data.one.gov.hk/td/psiparkingspaces/occupancystatus/occupancystatus.csv`;
 export const API_TURN_RESTRICTIONS_URL = `${CORS_PROXY}https://static.data.gov.hk/td/road-network-v2/TURN.kmz`;
@@ -13,6 +14,7 @@ export const API_PROHIBITION_PC_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/s
 export const API_PROHIBITION_ALL_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PROHIBITION&outputFormat=geojson&filter=<Filter><PropertyIsEqualTo><PropertyName>EXC_VEH_TYPE</PropertyName><Literal>'ALL'</Literal></PropertyIsEqualTo></Filter>`;
 export const API_ROAD_NETWORK_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=CENTERLINE&outputFormat=geojson`;
 export const API_TRAFFIC_SPEED_URL = `${CORS_PROXY}https://resource.data.one.gov.hk/td/traffic-detectors/irnAvgSpeed-all.xml`;
+export const API_OIL_STATIONS_URL = `${CORS_PROXY}https://spycswdev.github.io/database/oil.csv`;
 
 export const i18n = {
     'en_US': {
@@ -36,10 +38,14 @@ export const i18n = {
         toggleCarParks: 'Car Parks',
         toggleAttractions: 'Park Attractions',
         toggleViewingPoints: 'Viewing Points',
+        toggleEVChargers: 'EV Chargers',
         toggleParkingMeters: 'Parking Meters',
+        toggleOilStations: 'Oil Stations',
         togglePermits: 'Permits',
         toggleProhibitions: 'Prohibitions',
         toggleTrafficSpeed: 'Traffic Speed',
+        toggleTurnRestrictions: 'Turn Restrictions',
+        toggleTrafficFeatures: 'Traffic Features',
         website: 'Website',
         countryPark: 'Country Park',
         street: 'Street',
@@ -64,7 +70,9 @@ export const i18n = {
         legendCarPark: 'Car Park',
         legendAttraction: 'Park Attraction',
         legendViewingPoint: 'Viewing Point',
+        legendEVCharger: 'EV Charger',
         legendParkingMeter: 'Parking Meter',
+        legendOilStation: 'Oil Station',
         legendTurnRestriction: 'Turn Restriction',
         legendZebraCrossing: 'Zebra Crossing',
         legendYellowBox: 'Yellow Box',
@@ -75,6 +83,10 @@ export const i18n = {
         legendTrafficSmooth: 'Smooth Traffic',
         legendTrafficSlow: 'Slow Traffic',
         legendTrafficCongested: 'Congested Traffic',
+        charger_types: 'Charger Types',
+        diesel: 'Diesel',
+        super: 'Super',
+        premium: 'Premium',
         vehicle_A: 'Any Vehicles (other than Medium and Heavy Goods Vehicles, Buses, Motor Cycles and Pedal Cycles)',
         vehicle_C: 'Coaches',
         vehicle_G: 'Goods Vehicles',
@@ -92,7 +104,9 @@ export const i18n = {
         unknown: 'Unknown',
         avgSpeed: 'Avg Speed',
         routeId: 'Route ID',
-        initialLoadMessage: 'First time loading may take a moment, please wait...'
+        initialLoadMessage: 'First time loading may take a moment, please wait...',
+        searchPlaceholder: 'Search car parks by name/address...',
+        noResults: 'No car parks found matching your search.',
     },
     'zh_TW': {
         modalTitle: '停車場詳情',
@@ -115,10 +129,14 @@ export const i18n = {
         toggleCarParks: '停車場',
         toggleAttractions: '郊野公園景點',
         toggleViewingPoints: '觀景台',
+        toggleEVChargers: '電動車充電站',
         toggleParkingMeters: '咪錶泊車位',
+        toggleOilStations: '油站',
         togglePermits: '許可證',
         toggleProhibitions: '禁區',
         toggleTrafficSpeed: '交通速度',
+        toggleTurnRestrictions: '轉向限制',
+        toggleTrafficFeatures: '交通設施',
         website: '網站',
         countryPark: '郊野公園',
         street: '街道',
@@ -143,7 +161,9 @@ export const i18n = {
         legendCarPark: '停車場',
         legendAttraction: '郊野公園景點',
         legendViewingPoint: '觀景台',
+        legendEVCharger: '電動車充電站',
         legendParkingMeter: '咪錶泊車位',
+        legendOilStation: '油站',
         legendTurnRestriction: '轉向限制',
         legendZebraCrossing: '斑馬線',
         legendYellowBox: '黃色方格路口',
@@ -154,6 +174,10 @@ export const i18n = {
         legendTrafficSmooth: '交通暢順',
         legendTrafficSlow: '交通緩慢',
         legendTrafficCongested: '交通擠塞',
+        charger_types: '充電器類型',
+        diesel: '柴油',
+        super: '超級汽油',
+        premium: '特級汽油',
         vehicle_A: '任何車輛 (中型及重型貨車、巴士、電單車及機動三輪車除外)',
         vehicle_C: '長途汽車',
         vehicle_G: '貨車',
@@ -171,7 +195,9 @@ export const i18n = {
         unknown: '不詳',
         avgSpeed: '平均速度',
         routeId: '路線ID',
-        initialLoadMessage: '首次加載可能需要一些時間，請稍候...'
+        initialLoadMessage: '首次加載可能需要一些時間，請稍候...',
+        searchPlaceholder: '按名稱/地址搜尋停車場...',
+        noResults: '找不到符合您搜尋的停車場。',
     },
     'zh_CN': {
         modalTitle: '停车场详情',
@@ -194,10 +220,14 @@ export const i18n = {
         toggleCarParks: '停车场',
         toggleAttractions: '郊野公园景点',
         toggleViewingPoints: '观景台',
+        toggleEVChargers: '电动车充电站',
         toggleParkingMeters: '咪表泊车位',
+        toggleOilStations: '油站',
         togglePermits: '许可证',
         toggleProhibitions: '禁区',
         toggleTrafficSpeed: '交通速度',
+        toggleTurnRestrictions: '转向限制',
+        toggleTrafficFeatures: '交通设施',
         website: '网站',
         countryPark: '郊野公园',
         street: '街道',
@@ -222,7 +252,9 @@ export const i18n = {
         legendCarPark: '停车场',
         legendAttraction: '郊野公园景点',
         legendViewingPoint: '观景台',
+        legendEVCharger: '电动车充电站',
         legendParkingMeter: '咪表泊车位',
+        legendOilStation: '油站',
         legendTurnRestriction: '转向限制',
         legendZebraCrossing: '斑马线',
         legendYellowBox: '黄色方格路口',
@@ -233,6 +265,10 @@ export const i18n = {
         legendTrafficSmooth: '交通畅顺',
         legendTrafficSlow: '交通缓慢',
         legendTrafficCongested: '交通挤塞',
+        charger_types: '充电器类型',
+        diesel: '柴油',
+        super: '超级汽油',
+        premium: '特级汽油',
         vehicle_A: '任何车辆 (中型及重型货车、巴士、摩托车及机动三轮车除外)',
         vehicle_C: '长途汽车',
         vehicle_G: '货车',
@@ -243,13 +279,15 @@ export const i18n = {
         op_S: '周一至周五每天上午 8 点至下午 5 点禁止停车； 下午 05:00 - 周一至周五每天午夜； 周六每天上午 8 点至午夜； 周日和公众假期每天上午 10 点至晚上 10 点',
         op_H: '每天上午8时至晚上8时',
         op_E: '每天上午7时至晚上8时',
-        op_Q: '逢星期一至六上午8时至晚上8时；星期日及公众假期上午10时至晚上10时',
+        op_Q: '逢星期一至六上午8时至晚上8时；星期日及公眾假期上午10时至晚上10时',
         op_J: '每天上午8时至午夜',
         op_A: '逢星期一至六上午8时至午夜 (星期日及公众假期除外)',
         op_B: '逢星期一至六上午8时至晚上8时 (星期日及公众假期除外)',
         unknown: '不详',
         avgSpeed: '平均速度',
         routeId: '路线ID',
-        initialLoadMessage: '首次加载可能需要一些时间，请稍候...'
+        initialLoadMessage: '首次加载可能需要一些时间，请稍候...',
+        searchPlaceholder: '按名称/地址搜索停车场...',
+        noResults: '找不到符合您搜索的停车场。',
     },
 };

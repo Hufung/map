@@ -7,11 +7,14 @@ export interface VisibleLayers {
     carparks: boolean;
     attractions: boolean;
     viewingPoints: boolean;
-
+    evChargers: boolean;
     parkingMeters: boolean;
+    oilStations: boolean;
     permits: boolean;
     prohibitions: boolean;
     trafficSpeed: boolean;
+    turnRestrictions: boolean;
+    trafficFeatures: boolean;
 }
 
 // Car Park Types
@@ -69,6 +72,28 @@ export interface ViewingPointProperties {
 }
 export type ViewingPointFeature = GeoJSON.Feature<GeoJSON.Point, ViewingPointProperties>;
 
+// EV Charger Types
+export interface EVChargerProperties {
+    OBJECTID: number;
+    LOCATION_EN: string;
+    ADDRESS_EN: string;
+    LOCATION_TC: string;
+    ADDRESS_TC: string;
+    LOCATION_SC: string;
+    ADDRESS_SC: string;
+    STANDARD_BS1363_no: number;
+    MEDIUM_IEC62196_no: number;
+    MEDIUM_SAEJ1772_no: number;
+    MEDIUM_OTHERS_no: number;
+    QUICK_CHAdeMO_no: number;
+    QUICK_CCS_DC_COMBO_no: number;
+    QUICK_IEC62196_no: number;
+    QUICK_GB_T20234_3_DC__no: number;
+    QUICK_OTHERS_no: number;
+    REMARK_FOR__OTHERS_: string;
+    DATA_PATH: string;
+}
+export type EVChargerFeature = GeoJSON.Feature<GeoJSON.Point, EVChargerProperties>;
 
 // Parking Meter Types
 export interface ParkingMeterProperties {
@@ -99,6 +124,18 @@ export interface GroupedParkingMeter {
     opPeriods: Set<string>;
 }
 
+// Oil Station Types
+export interface OilStation {
+    Name: string;
+    Address: string;
+    District: string;
+    Latitude: number;
+    Longitude: number;
+    Brand: string;
+    Diesel: string;
+    Super: string;
+    Premium: string;
+}
 
 // Turn Restriction Types
 export interface TurnRestrictionProperties {

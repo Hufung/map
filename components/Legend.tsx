@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Language } from '../types';
 import { i18n } from '../constants';
-import { CarparkSVG, AttractionSVG, ViewingPointSVG, ParkingMeterSVG, PermitSVG, ProhibitionSVG } from './MapIcons';
+import { CarparkSVG, AttractionSVG, ViewingPointSVG, EVSVG, ParkingMeterSVG, PermitSVG, ProhibitionSVG, OilStationSVG } from './MapIcons';
 
 interface LegendProps {
     language: Language;
@@ -44,7 +44,9 @@ export const Legend: React.FC<LegendProps> = ({ language }) => {
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-blue-600 rounded-full p-0.5"><CarparkSVG/></div>} label={t.legendCarPark} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-green-500 rounded-full"><AttractionSVG/></div>} label={t.legendAttraction} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-amber-500 rounded-full p-0.5"><ViewingPointSVG/></div>} label={t.legendViewingPoint} />
+                <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-teal-500 rounded-full p-0.5"><EVSVG/></div>} label={t.legendEVCharger} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-purple-500 rounded-full p-0.5"><ParkingMeterSVG/></div>} label={t.legendParkingMeter} />
+                <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-gray-700 rounded-full p-0.5"><OilStationSVG/></div>} label={t.legendOilStation} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-orange-500 rounded-full p-0.5"><PermitSVG/></div>} label={t.legendPermit} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-red-600 rounded-full p-0.5"><ProhibitionSVG/></div>} label={t.legendProhibition} />
                 <LegendRow icon={<div className="w-full h-full flex items-center justify-center bg-red-500 text-white font-bold rounded-full text-sm">&#8635;</div>} label={t.legendTurnRestriction} />

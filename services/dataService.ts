@@ -3,6 +3,7 @@ import type {
     Carpark, 
     AttractionFeature, 
     ViewingPointFeature, 
+    EVChargerFeature,
     ParkingMeterFeature, 
     TurnRestrictionFeature,
     TrafficFeature,
@@ -10,13 +11,15 @@ import type {
     ProhibitionFeature,
     RoadNetworkFeature,
     TrafficSpeedInfo,
-    Language 
+    Language,
+    OilStation
 } from '../types';
 import { 
     API_INFO_BASE_URL, 
     API_VACANCY_BASE_URL, 
     API_ATTRACTIONS_URL, 
     API_VIEWING_POINTS_URL, 
+    API_EV_CHARGERS_URL,
     API_PARKING_METERS_BASE_URL,
     API_PARKING_METERS_STATUS_URL,
     API_TURN_RESTRICTIONS_URL,
@@ -25,7 +28,8 @@ import {
     API_PROHIBITION_PC_URL,
     API_PROHIBITION_ALL_URL,
     API_ROAD_NETWORK_URL,
-    API_TRAFFIC_SPEED_URL
+    API_TRAFFIC_SPEED_URL,
+    API_OIL_STATIONS_URL
 } from '../constants';
 
 // --- Car Parks ---
@@ -72,6 +76,14 @@ export async function fetchAttractionsData(): Promise<AttractionFeature[]> {
 export async function fetchViewingPointsData(): Promise<ViewingPointFeature[]> {
     const response = await fetch(API_VIEWING_POINTS_URL);
     if (!response.ok) throw new Error('Failed to fetch viewing points data.');
+    const data = await response.json();
+    return data.features || [];
+}
+
+// --- EV Chargers ---
+export async function fetchEVChargerData(): Promise<EVChargerFeature[]> {
+    const response = await fetch(API_EV_CHARGERS_URL);
+    if (!response.ok) throw new Error('Failed to fetch EV charger data.');
     const data = await response.json();
     return data.features || [];
 }
@@ -126,6 +138,121 @@ export async function fetchParkingMetersInBounds(bounds: L.LatLngBounds): Promis
     return data.features || [];
 }
 
+// --- Oil Stations ---
+function parseOilStationCSV(csvText: string, language: Language): OilStation[] {
+    const lines = csvText.trim().split('\n');
+    const result: OilStation[] = [];
+    
+    // Skip header line
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        const values = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+
+            if (char === '"') {
+                if (inQuotes && j < line.length - 1 && line[j + 1] === '"') {
+                    current += '"';
+                    j++; // Skip the second quote of the pair
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                values.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        values.push(current);
+
+        if (values.length !== 9 && values.length !== 7) {
+            console.warn(`Skipping malformed oil station line (expected 9 or 7 columns, got ${values.length}):`, line);
+            continue;
+        }
+
+        const isLpg7Col = values.length === 7;
+        
+        let name: string;
+        if (isLpg7Col) {
+            switch(language) {
+                case 'zh_TW':
+                    name = values[0].trim();
+                    break;
+                case 'zh_CN':
+                    name = values[1].trim();
+                    break;
+                case 'en_US':
+                default:
+                    name = values[2].trim();
+                    break;
+            }
+        } else {
+            name = values[0].trim();
+        }
+        
+        const address = isLpg7Col ? 'Dedicated LPG Station' : values[1];
+        const district = isLpg7Col ? '' : values[2];
+        const latStr = isLpg7Col ? values[5] : values[3];
+        const lonStr = isLpg7Col ? values[6] : values[4];
+        const brand = isLpg7Col ? values[3] : values[5];
+        const diesel = isLpg7Col ? '-' : values[6];
+        const superVal = isLpg7Col ? '-' : values[7];
+        const premium = isLpg7Col ? '-' : values[8];
+
+        let modifiedLonStr = lonStr;
+        const decimalIndex = lonStr.indexOf('.');
+        // Per user request, remove last two digits of longitude.
+        // To prevent large coordinate shifts, only do this if there are more than 2 decimal places.
+        if (decimalIndex !== -1) {
+            const decimalPart = lonStr.substring(decimalIndex + 1);
+            if (decimalPart.length > 2) {
+                modifiedLonStr = lonStr.slice(0, -2);
+            }
+        }
+        
+        const latitude = parseFloat(latStr);
+        const longitude = parseFloat(modifiedLonStr);
+        
+        if (isNaN(latitude) || isNaN(longitude)) {
+             console.warn("Skipping oil station with invalid coordinates:", line);
+            continue;
+        }
+
+        const station: OilStation = {
+            Name: name,
+            Address: address.trim(),
+            District: district.trim(),
+            Latitude: latitude,
+            Longitude: longitude,
+            Brand: brand.trim(),
+            Diesel: diesel.trim(),
+            Super: superVal.trim(),
+            Premium: premium.trim()
+        };
+        result.push(station);
+    }
+    return result;
+}
+
+export async function fetchOilStationsData(language: Language): Promise<OilStation[]> {
+    try {
+        const response = await fetch(API_OIL_STATIONS_URL);
+        if (!response.ok) throw new Error('Failed to fetch oil station data.');
+        const csvText = await response.text();
+        return parseOilStationCSV(csvText, language);
+    } catch (error) {
+        console.error("Error fetching oil station data:", error);
+        return [];
+    }
+}
+
+
 // --- Turn Restrictions ---
 function parseKMLToGeoJSON(kmlText: string): { type: 'FeatureCollection'; features: TurnRestrictionFeature[] } {
     const parser = new DOMParser();
@@ -178,12 +305,7 @@ export async function fetchTurnRestrictionsData(): Promise<TurnRestrictionFeatur
 }
 
 // --- Traffic Features ---
-export async function fetchTrafficFeaturesNearby(latlng: L.LatLng): Promise<TrafficFeature[]> {
-    const buffer = 0.001; // Approx 100 meters
-    const bounds = L.latLngBounds(
-        [latlng.lat - buffer, latlng.lng - buffer],
-        [latlng.lat + buffer, latlng.lng + buffer]
-    );
+export async function fetchTrafficFeaturesInBounds(bounds: L.LatLngBounds): Promise<TrafficFeature[]> {
     const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
     const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
     const filter = `<Filter><BBOX><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></BBOX></Filter>`;
@@ -234,7 +356,9 @@ export async function fetchProhibitionData(): Promise<ProhibitionFeature[]> {
 export async function fetchRoadNetworkData(bounds: L.LatLngBounds): Promise<RoadNetworkFeature[]> {
     const baseUrl = API_ROAD_NETWORK_URL;
     const allFeatures: RoadNetworkFeature[] = [];
-    const pageSize = 1000; // WFS server record limit.
+    const pageSize = 1000;
+    const maxRetries = 3;
+    const initialDelay = 1000;
 
     const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
     const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
@@ -246,34 +370,60 @@ export async function fetchRoadNetworkData(bounds: L.LatLngBounds): Promise<Road
     while (hasMore) {
         const url = `${baseUrl}&resultOffset=${startIndex}&resultRecordCount=${pageSize}&filter=${encodeURIComponent(boundsFilter)}`;
         
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                console.error(`Failed to fetch road network data for bounds ${bounds.toBBoxString()}. Status: ${response.status}`);
-                throw new Error(`Failed to fetch road network data. Status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            const features = data.features || [];
-
-            if (features.length > 0) {
-                 features.forEach((feature: RoadNetworkFeature) => {
-                    if (feature.properties && feature.properties.ROUTE_ID) {
-                        feature.properties.ROUTE_ID = String(feature.properties.ROUTE_ID).trim();
-                        allFeatures.push(feature);
+        let success = false;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    // Retry on general server errors (5xx)
+                    if (response.status >= 500 && attempt < maxRetries) {
+                        const delay = initialDelay * Math.pow(2, attempt - 1);
+                        console.warn(`Attempt ${attempt} failed with status ${response.status}. Retrying in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
                     }
-                });
-                
-                startIndex += features.length;
-                if (features.length < pageSize) {
-                    hasMore = false; // Last page
+                    console.error(`Failed to fetch road network data for bounds ${bounds.toBBoxString()}. Status: ${response.status}`);
+                    throw new Error(`Failed to fetch road network data. Status: ${response.status}`);
                 }
-            } else {
-                hasMore = false; // No more features
+                
+                const data = await response.json();
+                const features = data.features || [];
+
+                if (features.length > 0) {
+                     features.forEach((feature: RoadNetworkFeature) => {
+                        if (feature.properties && feature.properties.ROUTE_ID) {
+                            feature.properties.ROUTE_ID = String(feature.properties.ROUTE_ID).trim();
+                            allFeatures.push(feature);
+                        }
+                    });
+                    
+                    startIndex += features.length;
+                    if (features.length < pageSize) {
+                        hasMore = false;
+                    }
+                } else {
+                    hasMore = false;
+                }
+                success = true;
+                break; // Exit retry loop on success
+            } catch (error) {
+                // Retry on network errors
+                if (error instanceof TypeError && attempt < maxRetries) {
+                    const delay = initialDelay * Math.pow(2, attempt - 1);
+                    console.warn(`Attempt ${attempt} failed with network error. Retrying in ${delay}ms...`, error);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+
+                if (attempt >= maxRetries) {
+                     console.error(`All attempts failed for fetching road network data for bounds ${bounds.toBBoxString()}:`, error);
+                     throw error; // Re-throw after all retries are exhausted
+                }
             }
-        } catch (error) {
-            console.error(`An error occurred while fetching road network data for bounds ${bounds.toBBoxString()}:`, error);
-            throw error; // Propagate error
+        }
+
+        if (!success) {
+            hasMore = false; // Stop if all retries failed
         }
     }
     

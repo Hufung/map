@@ -7,11 +7,11 @@ import {
     Carpark, AttractionFeature, ViewingPointFeature, EVChargerFeature,
     TurnRestrictionFeature, TrafficFeature, PermitFeature, ProhibitionFeature, 
     RoadNetworkFeature, TrafficSpeedInfo,
-    Language, VisibleLayers, GroupedParkingMeter, OilStation
+    Language, VisibleLayers, GroupedParkingMeter, OilStation, ToiletFeature
 } from '../types';
 import { i18n } from '../constants';
-import { fetchParkingMetersInBounds, getCachedParkingMeterStatus, fetchTrafficFeaturesInBounds } from '../services/dataService';
-import { createCarparkIcon, createAttractionIcon, createViewingPointIcon, createEVChargerIcon, createParkingMeterIcon, createTurnRestrictionIcon, createTrafficFeatureIcon, createPermitIcon, createProhibitionIcon, createOilStationIcon } from './MapIcons';
+import { fetchParkingMetersInBounds, getCachedParkingMeterStatus, fetchTrafficFeaturesInBounds, fetchToiletsInBounds } from '../services/dataService';
+import { createCarparkIcon, createAttractionIcon, createViewingPointIcon, createEVChargerIcon, createParkingMeterIcon, createTurnRestrictionIcon, createTrafficFeatureIcon, createPermitIcon, createProhibitionIcon, createOilStationIcon, createToiletIcon } from './MapIcons';
 import { RoutePanel } from './RoutePanel';
 import { NavigationNotification } from './NavigationNotification';
 
@@ -164,7 +164,6 @@ export const MapComponent: React.FC<MapComponentProps> = ({
                 show: false,
                 addWaypoints: false,
                 fitSelectedRoutes: true,
-                // @ts-ignore - Type definitions for leaflet-routing-machine may be incorrect
                 lineOptions: { styles: [{ color: '#007BFF', opacity: 0.8, weight: 6 }] }
             }).addTo(map);
 
@@ -211,6 +210,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             evChargers: L.layerGroup(),
             parkingMeters: L.layerGroup(),
             oilStations: L.layerGroup(),
+            toilets: L.layerGroup(),
             permits: L.layerGroup(),
             prohibitions: L.layerGroup(),
             trafficFeatures: L.layerGroup(),
@@ -324,31 +324,33 @@ export const MapComponent: React.FC<MapComponentProps> = ({
         layer.clearLayers();
         
         oilStationData.forEach(station => {
-            if (station.Latitude && station.Longitude) {
-                const icon = createOilStationIcon(station.Brand);
-                const prices = [
-                    { label: t.diesel, price: station.Diesel },
-                    { label: t.super, price: station.Super },
-                    { label: t.premium, price: station.Premium }
-                ]
-                .filter(p => p.price && p.price !== '-')
-                .map(p => `<li class="ml-4 list-disc">${p.label}: <strong>$${p.price}</strong></li>`)
-                .join('');
+            if (station.latitude && station.longitude) {
+                const icon = createOilStationIcon(station.company);
+                const iconHtml = (icon.options.html as string) || '';
+                
+                const fuelsList = station.fuels
+                    .map(fuel => `<li class="ml-4 list-disc">${fuel}</li>`)
+                    .join('');
 
                 const pop = `
                     <div class="text-sm w-64">
-                        <div class="font-bold text-base mb-1">${station.Name}</div>
-                        <div class="text-xs text-gray-600">${station.Address}</div>
-                        <div class="text-xs text-gray-500">Brand: ${station.Brand}</div>
+                        <div class="flex items-center mb-1">
+                            <div class="w-8 h-8 flex-shrink-0 mr-2 flex items-center justify-center">${iconHtml}</div>
+                            <div class="flex-grow">
+                                <div class="font-bold text-base leading-tight">${station.name}</div>
+                                <div class="text-xs text-gray-500 italic">${station.company}</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-600 mb-2">${station.address}</div>
                         <hr class="my-1">
-                        ${prices ? `<div class="mt-2"><ul class="list-none pl-0 mt-1">${prices}</ul></div>` : ''}
-                        <button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${station.Latitude}" data-lon="${station.Longitude}">${t.navigate}</button>
+                        ${fuelsList ? `<div class="mt-2"><span class="font-semibold">${t.fuelsAvailable}:</span><ul class="list-none pl-0 mt-1">${fuelsList}</ul></div>` : ''}
+                        <button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${station.latitude}" data-lon="${station.longitude}">${t.navigate}</button>
                     </div>
                 `;
-                L.marker([station.Latitude, station.Longitude], { icon }).addTo(layer).bindPopup(pop, { maxWidth: 300 });
+                L.marker([station.latitude, station.longitude], { icon }).addTo(layer).bindPopup(pop, { maxWidth: 300 });
             }
         });
-    }, [oilStationData, language, t.diesel, t.super, t.premium, t.navigate]);
+    }, [oilStationData, language, t.fuelsAvailable, t.navigate]);
 
     // Plot Turn Restrictions
     useEffect(() => {
@@ -589,78 +591,103 @@ export const MapComponent: React.FC<MapComponentProps> = ({
             console.error("Failed to plot traffic features:", error);
         }
     }, []);
+    
+    const plotToilets = useCallback(async () => {
+        const map = mapRef.current;
+        if (!map) return;
+        const layer = layersRef.current.toilets;
+        layer.clearLayers();
 
+        try {
+            const features = await fetchToiletsInBounds(map.getBounds());
+            
+            const nameKey = language === 'en_US' ? 'Name_en' : (language === 'zh_TW' ? 'Name_zh_Hant' : 'Name_zh_Hans');
+            const addressKey = language === 'en_US' ? 'Address_en' : (language === 'zh_TW' ? 'Address_zh_Hant' : 'Address_zh_Hans');
+            const afcdNameKey = language === 'en_US' ? 'Name_Eng' : 'Name_Chi';
+
+            features.forEach(feature => {
+                const [lon, lat] = feature.geometry.coordinates;
+                const p = feature.properties;
+
+                const name = p[nameKey as keyof typeof p] || p[afcdNameKey as keyof typeof p] || t.legendToilet;
+                const address = p[addressKey as keyof typeof p] || '';
+
+                const pop = `
+                    <div class="text-sm w-64">
+                        <div class="font-bold text-base mb-1">${name}</div>
+                        ${address ? `<div class="text-xs text-gray-600">${address}</div>` : ''}
+                        <button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${lat}" data-lon="${lon}">${t.navigate}</button>
+                    </div>
+                `;
+
+                L.marker([lat, lon], { icon: createToiletIcon() }).addTo(layer).bindPopup(pop);
+            });
+        } catch (error) {
+            console.error("Failed to plot toilets:", error);
+        }
+    }, [language, t.legendToilet, t.navigate]);
+
+    // Layer visibility management
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        Object.entries(layersRef.current).forEach(([key, layer]) => {
+            const isVisible = visibleLayers[key as keyof VisibleLayers];
+            
+            // Special handling for on-demand layers
+            if (isVisible) {
+                if (key === 'parkingMeters') plotParkingMeters();
+                if (key === 'trafficFeatures') plotTrafficFeatures();
+                if (key === 'toilets') plotToilets();
+            }
+
+            // Special handling for traffic speed layer to add/remove all road polylines
+            if (key === 'trafficSpeed') {
+                if (isVisible && !map.hasLayer(layer)) {
+                    map.addLayer(layer);
+                    roadLayersRef.current.forEach(line => line.addTo(layer));
+                } else if (!isVisible && map.hasLayer(layer)) {
+                    // Don't clear polylines from cache, just remove from map
+                    map.removeLayer(layer); 
+                }
+                return;
+            }
+
+            if (isVisible && !map.hasLayer(layer)) {
+                map.addLayer(layer);
+            } else if (!isVisible && map.hasLayer(layer)) {
+                map.removeLayer(layer);
+            }
+        });
+    }, [visibleLayers, plotParkingMeters, plotTrafficFeatures, plotToilets]);
+    
+    // Map event listeners for on-demand fetching
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
         
-        let moveEndTimer: ReturnType<typeof window.setTimeout>;
-        const onMoveEnd = () => {
-            clearTimeout(moveEndTimer);
-            moveEndTimer = window.setTimeout(() => {
-                if(visibleLayers.parkingMeters) plotParkingMeters();
-                if(visibleLayers.trafficSpeed) onMapViewChange(map.getBounds());
-                if(visibleLayers.trafficFeatures) plotTrafficFeatures();
-            }, 500);
+        const handleMapEvents = () => {
+             onMapViewChange(map.getBounds());
+            if (visibleLayers.parkingMeters) plotParkingMeters();
+            if (visibleLayers.trafficFeatures) plotTrafficFeatures();
+            if (visibleLayers.toilets) plotToilets();
         };
-        map.on('moveend', onMoveEnd);
-        return () => { map.off('moveend', onMoveEnd); clearTimeout(moveEndTimer); }
-    }, [visibleLayers, plotParkingMeters, onMapViewChange, plotTrafficFeatures]);
 
-    // Manage Layer Visibility
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        Object.entries(visibleLayers).forEach(([key, isVisible]) => {
-            const layer = layersRef.current[key];
-            if (layer) {
-                if (isVisible && !map.hasLayer(layer)) {
-                    map.addLayer(layer);
-                     // If traffic layer is added and no data has been fetched, fetch it.
-                    if (key === 'trafficSpeed' && roadNetworkData.length === 0) {
-                        onMapViewChange(map.getBounds());
-                    }
-                    if (key === 'trafficFeatures') {
-                        plotTrafficFeatures();
-                    }
-                }
-                else if (!isVisible && map.hasLayer(layer)) map.removeLayer(layer);
-            }
-        });
-        if(visibleLayers.parkingMeters) plotParkingMeters();
-    }, [visibleLayers, plotParkingMeters, onMapViewChange, roadNetworkData.length, plotTrafficFeatures]);
+        map.on('moveend', handleMapEvents);
+        map.on('zoomend', handleMapEvents);
 
-    // Navigation mode effect
-    useEffect(() => {
-        if (currentRoute) {
-            positionWatchIdRef.current = navigator.geolocation.watchPosition(
-                position => {
-                    const userLatLng = L.latLng(position.coords.latitude, position.coords.longitude);
-                     if (userLocationMarkerRef.current) userLocationMarkerRef.current.setLatLng(userLatLng);
-                    checkProximityAlerts(userLatLng);
-                    
-                    // Fix: The IRoute.waypoints property has inconsistent type definitions.
-                    // Using the last coordinate from IRoute.coordinates is a more reliable way to get the destination LatLng.
-                    const destination = currentRoute.coordinates[currentRoute.coordinates.length - 1];
-                    if(destination && userLatLng.distanceTo(destination) < 50) {
-                        showNotification(t.arrived, true);
-                        stopNavigation();
-                    }
-                },
-                console.error,
-                { enableHighAccuracy: true }
-            );
-        }
         return () => {
-            if (positionWatchIdRef.current !== null) navigator.geolocation.clearWatch(positionWatchIdRef.current);
+            map.off('moveend', handleMapEvents);
+            map.off('zoomend', handleMapEvents);
         };
-    }, [currentRoute, stopNavigation, checkProximityAlerts, t.arrived, showNotification]);
+    }, [mapRef, visibleLayers, onMapViewChange, plotParkingMeters, plotTrafficFeatures, plotToilets]);
 
     return (
         <>
-            <div ref={mapContainerRef} className="h-full w-full z-0" />
-            {currentRoute && <RoutePanel route={currentRoute} onStop={stopNavigation} language={language} />}
-            {notification && <NavigationNotification message={notification} onDismiss={() => setNotification('')} />}
+            <div ref={mapContainerRef} className="w-full h-full z-0" />
+            {currentRoute && <RoutePanel route={currentRoute} onStop={stopNavigation} language={language}/>}
+            {notification && <NavigationNotification message={notification} onDismiss={() => setNotification('')}/>}
         </>
     );
 };

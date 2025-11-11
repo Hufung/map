@@ -12,7 +12,8 @@ import type {
     RoadNetworkFeature,
     TrafficSpeedInfo,
     Language,
-    OilStation
+    OilStation,
+    ToiletFeature
 } from '../types';
 import { 
     API_INFO_BASE_URL, 
@@ -29,7 +30,10 @@ import {
     API_PROHIBITION_ALL_URL,
     API_ROAD_NETWORK_URL,
     API_TRAFFIC_SPEED_URL,
-    API_OIL_STATIONS_URL
+    API_OIL_STATIONS_URL,
+    API_TOILETS_FEHD_URL,
+    API_TOILETS_AFCD_URL,
+    i18n
 } from '../constants';
 
 // --- Car Parks ---
@@ -139,105 +143,97 @@ export async function fetchParkingMetersInBounds(bounds: L.LatLngBounds): Promis
 }
 
 // --- Oil Stations ---
-function parseOilStationCSV(csvText: string, language: Language): OilStation[] {
-    const lines = csvText.trim().split('\n');
-    const result: OilStation[] = [];
-    
-    // Skip header line
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
 
-        const values = [];
-        let current = '';
-        let inQuotes = false;
-
-        for (let j = 0; j < line.length; j++) {
-            const char = line[j];
-
-            if (char === '"') {
-                if (inQuotes && j < line.length - 1 && line[j + 1] === '"') {
-                    current += '"';
-                    j++; // Skip the second quote of the pair
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (char === ',' && !inQuotes) {
-                values.push(current);
-                current = '';
+// Helper to parse a single CSV line, handling quoted fields.
+const parseCsvLine = (line: string): string[] => {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            // If we see a quote, check if it's an escaped quote ("")
+            if (inQuotes && i < line.length - 1 && line[i + 1] === '"') {
+                current += '"';
+                i++; // Skip the second quote
             } else {
-                current += char;
+                inQuotes = !inQuotes;
             }
-        }
-        values.push(current);
-
-        if (values.length !== 9 && values.length !== 7) {
-            console.warn(`Skipping malformed oil station line (expected 9 or 7 columns, got ${values.length}):`, line);
-            continue;
-        }
-
-        const isLpg7Col = values.length === 7;
-        
-        let name: string;
-        if (isLpg7Col) {
-            switch(language) {
-                case 'zh_TW':
-                    name = values[0].trim();
-                    break;
-                case 'zh_CN':
-                    name = values[1].trim();
-                    break;
-                case 'en_US':
-                default:
-                    name = values[2].trim();
-                    break;
-            }
+        } else if (char === ',' && !inQuotes) {
+            values.push(current.trim());
+            current = '';
         } else {
-            name = values[0].trim();
+            current += char;
         }
-        
-        const address = isLpg7Col ? 'Dedicated LPG Station' : values[1];
-        const district = isLpg7Col ? '' : values[2];
-        const latStr = isLpg7Col ? values[5] : values[3];
-        const lonStr = isLpg7Col ? values[6] : values[4];
-        const brand = isLpg7Col ? values[3] : values[5];
-        const diesel = isLpg7Col ? '-' : values[6];
-        const superVal = isLpg7Col ? '-' : values[7];
-        const premium = isLpg7Col ? '-' : values[8];
+    }
+    values.push(current.trim());
+    return values;
+};
 
-        let modifiedLonStr = lonStr;
-        const decimalIndex = lonStr.indexOf('.');
-        // Per user request, remove last two digits of longitude.
-        // To prevent large coordinate shifts, only do this if there are more than 2 decimal places.
-        if (decimalIndex !== -1) {
-            const decimalPart = lonStr.substring(decimalIndex + 1);
-            if (decimalPart.length > 2) {
-                modifiedLonStr = lonStr.slice(0, -2);
-            }
-        }
+function parseOilStationCSV(csvText: string, language: Language): OilStation[] {
+    // Remove BOM if present at the start of the file
+    let cleanCsvText = csvText.startsWith('\uFEFF') ? csvText.substring(1) : csvText;
+    
+    const lines = cleanCsvText.trim().split('\n');
+    const stations: OilStation[] = [];
+    const headerLine = lines.shift();
+    if (!headerLine) return [];
+
+    // Columns are in a fixed order as per the sample:
+    // Station_EN,Station_TC,Station_SC,Brand_EN,Brand_TC,Brand_SC,All_Oil_Types_EN,All_Oil_Types_TC,All_Oil_Types_SC,Latitude,Longitude
+    const langMap = {
+        'en_US': { name: 0, brand: 3, types: 6 },
+        'zh_TW': { name: 1, brand: 4, types: 7 },
+        'zh_CN': { name: 2, brand: 5, types: 8 },
+    };
+    const latIndex = 9;
+    const lonIndex = 10;
+
+    const currentLangIndices = langMap[language];
+    const fallbackLangIndices = langMap['en_US'];
+
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        const values = parseCsvLine(trimmedLine);
         
-        const latitude = parseFloat(latStr);
-        const longitude = parseFloat(modifiedLonStr);
-        
-        if (isNaN(latitude) || isNaN(longitude)) {
-             console.warn("Skipping oil station with invalid coordinates:", line);
+        if (values.length < 11) {
+            console.warn("Skipping malformed oil station line, not enough columns:", trimmedLine);
             continue;
         }
 
-        const station: OilStation = {
-            Name: name,
-            Address: address.trim(),
-            District: district.trim(),
-            Latitude: latitude,
-            Longitude: longitude,
-            Brand: brand.trim(),
-            Diesel: diesel.trim(),
-            Super: superVal.trim(),
-            Premium: premium.trim()
-        };
-        result.push(station);
+        try {
+            const name = values[currentLangIndices.name] || values[fallbackLangIndices.name] || '';
+            const company = values[currentLangIndices.brand] || values[fallbackLangIndices.brand] || '';
+            const oilTypesString = values[currentLangIndices.types] || values[fallbackLangIndices.types] || '';
+            const latitude = parseFloat(values[latIndex]);
+            const longitude = parseFloat(values[lonIndex]);
+
+            if (isNaN(latitude) || isNaN(longitude)) {
+                 console.warn("Could not parse oil station line, invalid coordinates:", trimmedLine);
+                continue;
+            }
+
+            // Split by " / " as seen in the sample data. If not found, assume it's a single type.
+            const fuels = oilTypesString ? oilTypesString.split(' / ').map(f => f.trim().replace(/Auto LPG/g, 'LPG')).filter(f => f) : [];
+
+            const station: OilStation = {
+                name,
+                address: name, // No separate address in this CSV format
+                company,
+                latitude,
+                longitude,
+                fuels,
+            };
+
+            stations.push(station);
+        } catch (e) {
+            console.error("Error processing oil station line:", trimmedLine, e);
+        }
     }
-    return result;
+
+    return stations;
 }
 
 export async function fetchOilStationsData(language: Language): Promise<OilStation[]> {
@@ -522,5 +518,41 @@ export async function fetchTrafficSpeedData(): Promise<TrafficSpeedInfo> {
     } catch (error) {
         console.error("An exception occurred in fetchTrafficSpeedData:", error);
         return {};
+    }
+}
+
+// --- Toilets ---
+export async function fetchToiletsInBounds(bounds: L.LatLngBounds): Promise<ToiletFeature[]> {
+    const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
+    const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
+    const bboxFilter = `<BBOX><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></BBOX>`;
+
+    // FEHD URL construction
+    const fehdBaseFilter = `<PropertyIsEqualTo><PropertyName>SEARCH02_TC</PropertyName><Literal>'公廁'</Literal></PropertyIsEqualTo>`;
+    const fehdCombinedFilter = `<Filter><And>${fehdBaseFilter}${bboxFilter}</And></Filter>`;
+    const fehdUrl = `${API_TOILETS_FEHD_URL}&filter=${encodeURIComponent(fehdCombinedFilter)}`;
+    
+    // AFCD URL construction
+    const afcdFilter = `<Filter>${bboxFilter}</Filter>`;
+    const afcdUrl = `${API_TOILETS_AFCD_URL}&filter=${encodeURIComponent(afcdFilter)}`;
+
+    try {
+        const [fehdResponse, afcdResponse] = await Promise.all([
+            fetch(fehdUrl),
+            fetch(afcdUrl)
+        ]);
+
+        const fehdData = fehdResponse.ok ? await fehdResponse.json() : { features: [] };
+        const afcdData = afcdResponse.ok ? await afcdResponse.json() : { features: [] };
+        
+        const allFeatures: ToiletFeature[] = [
+            ...(fehdData.features || []),
+            ...(afcdData.features || [])
+        ];
+        
+        return allFeatures;
+    } catch (error) {
+        console.error("Error fetching toilet data:", error);
+        return [];
     }
 }

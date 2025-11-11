@@ -14,7 +14,9 @@ export const API_PROHIBITION_PC_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/s
 export const API_PROHIBITION_ALL_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=PROHIBITION&outputFormat=geojson&filter=<Filter><PropertyIsEqualTo><PropertyName>EXC_VEH_TYPE</PropertyName><Literal>'ALL'</Literal></PropertyIsEqualTo></Filter>`;
 export const API_ROAD_NETWORK_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=CENTERLINE&outputFormat=geojson`;
 export const API_TRAFFIC_SPEED_URL = `${CORS_PROXY}https://resource.data.one.gov.hk/td/traffic-detectors/irnAvgSpeed-all.xml`;
-export const API_OIL_STATIONS_URL = `${CORS_PROXY}https://spycswdev.github.io/database/oil.csv`;
+export const API_OIL_STATIONS_URL = `${CORS_PROXY}https://hufung.github.io/data/stations.csv`;
+export const API_TOILETS_FEHD_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/fehd_rcd_1629969687926_30590/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=FEHD_FACI&outputFormat=geojson`;
+export const API_TOILETS_AFCD_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635136427551_29173/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Toilets&outputFormat=geojson`;
 
 export const i18n = {
     'en_US': {
@@ -46,6 +48,7 @@ export const i18n = {
         toggleTrafficSpeed: 'Traffic Speed',
         toggleTurnRestrictions: 'Turn Restrictions',
         toggleTrafficFeatures: 'Traffic Features',
+        toggleToilets: 'Toilets',
         website: 'Website',
         countryPark: 'Country Park',
         street: 'Street',
@@ -80,6 +83,7 @@ export const i18n = {
         legendCulDeSac: 'Cul-de-sac',
         legendPermit: 'Permit',
         legendProhibition: 'Prohibition Zone',
+        legendToilet: 'Toilet',
         legendTrafficSmooth: 'Smooth Traffic',
         legendTrafficSlow: 'Slow Traffic',
         legendTrafficCongested: 'Congested Traffic',
@@ -87,6 +91,9 @@ export const i18n = {
         diesel: 'Diesel',
         super: 'Super',
         premium: 'Premium',
+        lpg: 'LPG',
+        fuelsAvailable: 'Fuels Available',
+        company: 'Company',
         vehicle_A: 'Any Vehicles (other than Medium and Heavy Goods Vehicles, Buses, Motor Cycles and Pedal Cycles)',
         vehicle_C: 'Coaches',
         vehicle_G: 'Goods Vehicles',
@@ -137,6 +144,7 @@ export const i18n = {
         toggleTrafficSpeed: '交通速度',
         toggleTurnRestrictions: '轉向限制',
         toggleTrafficFeatures: '交通設施',
+        toggleToilets: '洗手間',
         website: '網站',
         countryPark: '郊野公園',
         street: '街道',
@@ -171,6 +179,7 @@ export const i18n = {
         legendCulDeSac: '盡頭路',
         legendPermit: '許可證',
         legendProhibition: '禁區',
+        legendToilet: '洗手間',
         legendTrafficSmooth: '交通暢順',
         legendTrafficSlow: '交通緩慢',
         legendTrafficCongested: '交通擠塞',
@@ -178,6 +187,9 @@ export const i18n = {
         diesel: '柴油',
         super: '超級汽油',
         premium: '特級汽油',
+        lpg: '石油氣',
+        fuelsAvailable: '提供燃料',
+        company: '公司',
         vehicle_A: '任何車輛 (中型及重型貨車、巴士、電單車及機動三輪車除外)',
         vehicle_C: '長途汽車',
         vehicle_G: '貨車',
@@ -228,6 +240,7 @@ export const i18n = {
         toggleTrafficSpeed: '交通速度',
         toggleTurnRestrictions: '转向限制',
         toggleTrafficFeatures: '交通设施',
+        toggleToilets: '洗手间',
         website: '网站',
         countryPark: '郊野公园',
         street: '街道',
@@ -262,6 +275,7 @@ export const i18n = {
         legendCulDeSac: '尽头路',
         legendPermit: '许可证',
         legendProhibition: '禁区',
+        legendToilet: '洗手间',
         legendTrafficSmooth: '交通畅顺',
         legendTrafficSlow: '交通缓慢',
         legendTrafficCongested: '交通挤塞',
@@ -269,6 +283,9 @@ export const i18n = {
         diesel: '柴油',
         super: '超级汽油',
         premium: '特级汽油',
+        lpg: '石油气',
+        fuelsAvailable: '提供燃料',
+        company: '公司',
         vehicle_A: '任何车辆 (中型及重型货车、巴士、摩托车及机动三轮车除外)',
         vehicle_C: '长途汽车',
         vehicle_G: '货车',

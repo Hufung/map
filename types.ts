@@ -15,6 +15,7 @@ export interface VisibleLayers {
     trafficSpeed: boolean;
     turnRestrictions: boolean;
     trafficFeatures: boolean;
+    toilets: boolean;
 }
 
 // Car Park Types
@@ -126,15 +127,12 @@ export interface GroupedParkingMeter {
 
 // Oil Station Types
 export interface OilStation {
-    Name: string;
-    Address: string;
-    District: string;
-    Latitude: number;
-    Longitude: number;
-    Brand: string;
-    Diesel: string;
-    Super: string;
-    Premium: string;
+    name: string;
+    address: string;
+    company: string;
+    latitude: number;
+    longitude: number;
+    fuels: string[];
 }
 
 // Turn Restriction Types
@@ -187,3 +185,18 @@ export interface TrafficSpeedInfo {
         reliability: number; // 1: smooth, 2: slow, 3: congested
     };
 }
+
+// Toilet Types
+export interface ToiletProperties {
+    // FEHD properties
+    Name_zh_Hant?: string;
+    Name_zh_Hans?: string;
+    Name_en?: string;
+    Address_zh_Hant?: string;
+    Address_zh_Hans?: string;
+    Address_en?: string;
+    // AFCD properties
+    Name_Eng?: string;
+    Name_Chi?: string;
+}
+export type ToiletFeature = GeoJSON.Feature<GeoJSON.Point, ToiletProperties>;

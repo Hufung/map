@@ -86,6 +86,11 @@ export const LayerControl: React.FC<LayerControlProps> = ({ language, visibleLay
                 checked={visibleLayers.trafficFeatures}
                 onChange={(c) => handleChange('trafficFeatures', c)}
             />
+             <Checkbox
+                label={t.toggleToilets}
+                checked={visibleLayers.toilets}
+                onChange={(c) => handleChange('toilets', c)}
+            />
             <Checkbox
                 label={t.toggleTrafficSpeed}
                 checked={visibleLayers.trafficSpeed}

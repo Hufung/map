@@ -12,7 +12,8 @@ import type {
     TrafficSpeedInfo,
     Language,
     VisibleLayers,
-    OilStation
+    OilStation,
+    ToiletFeature
 } from './types';
 import { 
     fetchCarparkData, 
@@ -90,6 +91,7 @@ const App: React.FC = () => {
         trafficSpeed: false,
         turnRestrictions: false,
         trafficFeatures: false,
+        toilets: false,
     });
     
     const [selectedCarpark, setSelectedCarpark] = useState<Carpark | null>(null);

@@ -78,8 +78,6 @@ export const createOilStationIcon = (brand: string = '') => {
 export const PermitSVG = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
-        <path d="M9 9H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7a1 1 0 10-2 0v2z" />
-        <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fontSize="12" fill="white" dy=".3em">P</text>
     </svg>
 );
 export const createPermitIcon = () => createIcon('flex items-center justify-center bg-orange-500 rounded-full border-2 border-white shadow-lg', <PermitSVG />, [28, 28]);
@@ -116,3 +114,8 @@ export const createTrafficFeatureIcon = (featureType: 1 | 2 | 3 | 4) => {
         iconAnchor: [10, 10]
     });
 };
+
+export const ToiletSVG = () => (
+    <strong className="text-white text-base font-bold">WC</strong>
+);
+export const createToiletIcon = () => createIcon('flex items-center justify-center bg-sky-500 rounded-full border-2 border-white shadow-lg', <ToiletSVG />, [28, 28]);

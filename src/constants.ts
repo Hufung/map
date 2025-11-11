@@ -1,7 +1,7 @@
 const CORS_PROXY = 'https://corsproxy.io/?';
 
-export const API_INFO_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=info';
-export const API_VACANCY_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=vacancy';
+export const API_INFO_BASE_URL = `${CORS_PROXY}https://api.data.gov.hk/v1/carpark-info-vacancy?data=info`;
+export const API_VACANCY_BASE_URL = `${CORS_PROXY}https://api.data.gov.hk/v1/carpark-info-vacancy?data=vacancy`;
 export const API_ATTRACTIONS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1728896853370_57183/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Attractions_in_Country_Parks&outputFormat=geojson`;
 export const API_VIEWING_POINTS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635142967951_6079/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Viewing_Point&outputFormat=geojson&maxFeatures=100`;
 export const API_EV_CHARGERS_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/epd_rcd_1631080339740_69941/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=geotagging&outputFormat=geojson`;

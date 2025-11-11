@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import JSZip from 'jszip';
 import type { 
     Carpark, 
     AttractionFeature, 
@@ -323,7 +324,6 @@ export async function fetchTurnRestrictionsData(): Promise<TurnRestrictionFeatur
         if (!response.ok) throw new Error('Failed to fetch turn restrictions KMZ data.');
 
         const kmzBlob = await response.blob();
-        // @ts-ignore JSZip is loaded from CDN
         const zip = await JSZip.loadAsync(kmzBlob);
         
         const kmlFile = Object.keys(zip.files).find(fileName => fileName.endsWith('.kml'));

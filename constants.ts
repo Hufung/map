@@ -15,6 +15,7 @@ export const API_PROHIBITION_ALL_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/
 export const API_ROAD_NETWORK_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=CENTERLINE&outputFormat=geojson`;
 export const API_TRAFFIC_SPEED_URL = `${CORS_PROXY}https://resource.data.one.gov.hk/td/traffic-detectors/irnAvgSpeed-all.xml`;
 export const API_OIL_STATIONS_URL = `${CORS_PROXY}https://hufung.github.io/data/stations.csv`;
+export const API_OIL_PRICES_URL = `${CORS_PROXY}https://www.consumer.org.hk/pricewatch/oilwatch/opendata/oilprice.json`;
 export const API_TOILETS_FEHD_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/fehd_rcd_1629969687926_30590/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=FEHD_FACI&outputFormat=geojson`;
 export const API_TOILETS_AFCD_URL = `${CORS_PROXY}https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635136427551_29173/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Toilets&outputFormat=geojson`;
 
@@ -93,6 +94,7 @@ export const i18n = {
         premium: 'Premium',
         lpg: 'LPG',
         fuelsAvailable: 'Fuels Available',
+        fuelPricesTitle: 'Fuel Prices',
         company: 'Company',
         vehicle_A: 'Any Vehicles (other than Medium and Heavy Goods Vehicles, Buses, Motor Cycles and Pedal Cycles)',
         vehicle_C: 'Coaches',
@@ -189,6 +191,7 @@ export const i18n = {
         premium: '特級汽油',
         lpg: '石油氣',
         fuelsAvailable: '提供燃料',
+        fuelPricesTitle: '燃油價格',
         company: '公司',
         vehicle_A: '任何車輛 (中型及重型貨車、巴士、電單車及機動三輪車除外)',
         vehicle_C: '長途汽車',
@@ -285,6 +288,7 @@ export const i18n = {
         premium: '特级汽油',
         lpg: '石油气',
         fuelsAvailable: '提供燃料',
+        fuelPricesTitle: '燃油价格',
         company: '公司',
         vehicle_A: '任何车辆 (中型及重型货车、巴士、摩托车及机动三轮车除外)',
         vehicle_C: '长途汽车',

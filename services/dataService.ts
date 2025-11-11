@@ -13,7 +13,8 @@ import type {
     TrafficSpeedInfo,
     Language,
     OilStation,
-    ToiletFeature
+    ToiletFeature,
+    OilPriceData
 } from '../types';
 import { 
     API_INFO_BASE_URL, 
@@ -31,6 +32,7 @@ import {
     API_ROAD_NETWORK_URL,
     API_TRAFFIC_SPEED_URL,
     API_OIL_STATIONS_URL,
+    API_OIL_PRICES_URL,
     API_TOILETS_FEHD_URL,
     API_TOILETS_AFCD_URL,
     i18n
@@ -246,6 +248,42 @@ export async function fetchOilStationsData(language: Language): Promise<OilStati
         console.error("Error fetching oil station data:", error);
         return [];
     }
+}
+
+export async function fetchOilPriceData(): Promise<OilPriceData> {
+    const priceMap: OilPriceData = new Map();
+    try {
+        const response = await fetch(API_OIL_PRICES_URL);
+        if (!response.ok) {
+            throw new Error('Failed to fetch oil price data.');
+        }
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+            data.forEach(fuelData => {
+                const fuelTypeEn = fuelData.type?.en;
+                if (fuelTypeEn && Array.isArray(fuelData.prices)) {
+                    fuelData.prices.forEach((vendorPrice: any) => {
+                        const vendorEn = vendorPrice.vendor?.en;
+                        const priceStr = vendorPrice.price;
+                        
+                        if (vendorEn && typeof priceStr === 'string') {
+                            const price = parseFloat(priceStr);
+                            if (!isNaN(price)) {
+                                if (!priceMap.has(vendorEn)) {
+                                    priceMap.set(vendorEn, new Map());
+                                }
+                                priceMap.get(vendorEn)!.set(fuelTypeEn, price);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Error fetching oil price data:", error);
+    }
+    return priceMap;
 }
 
 

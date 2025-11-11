@@ -135,6 +135,8 @@ export interface OilStation {
     fuels: string[];
 }
 
+export type OilPriceData = Map<string, Map<string, number>>; // Map<CompanyName, Map<FuelType, Price>>
+
 // Turn Restriction Types
 export interface TurnRestrictionProperties {
     name: string;

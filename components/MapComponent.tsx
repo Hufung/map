@@ -7,7 +7,8 @@ import {
     Carpark, AttractionFeature, ViewingPointFeature, EVChargerFeature,
     TurnRestrictionFeature, TrafficFeature, PermitFeature, ProhibitionFeature, 
     RoadNetworkFeature, TrafficSpeedInfo,
-    Language, VisibleLayers, GroupedParkingMeter, OilStation, ToiletFeature
+    Language, VisibleLayers, GroupedParkingMeter, OilStation, ToiletFeature,
+    OilPriceData
 } from '../types';
 import { i18n } from '../constants';
 import { fetchParkingMetersInBounds, getCachedParkingMeterStatus, fetchTrafficFeaturesInBounds, fetchToiletsInBounds } from '../services/dataService';
@@ -48,6 +49,7 @@ interface MapComponentProps {
     roadNetworkData: RoadNetworkFeature[];
     trafficSpeedData: TrafficSpeedInfo;
     oilStationData: OilStation[];
+    oilPriceData: OilPriceData;
     onMarkerClick: (carpark: Carpark) => void;
     navigationTarget: { lat: number, lon: number } | null;
     onNavigationStarted: () => void;
@@ -58,7 +60,7 @@ interface MapComponentProps {
 export const MapComponent: React.FC<MapComponentProps> = ({
     setMap, language, visibleLayers, carparkData, attractionsData,
     viewingPointsData, evChargerData, turnRestrictionsData, permitData, prohibitionData,
-    roadNetworkData, trafficSpeedData, oilStationData,
+    roadNetworkData, trafficSpeedData, oilStationData, oilPriceData,
     onMarkerClick, navigationTarget, onNavigationStarted, onMapViewChange, searchResultBounds
 }) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -329,7 +331,12 @@ export const MapComponent: React.FC<MapComponentProps> = ({
                 const iconHtml = (icon.options.html as string) || '';
                 
                 const fuelsList = station.fuels
-                    .map(fuel => `<li class="ml-4 list-disc">${fuel}</li>`)
+                    .map(fuel => {
+                        // Use direct lookup, assuming fuel names from CSV match keys in price data
+                        const price = oilPriceData.get(station.company)?.get(fuel);
+                        const priceText = price ? `<span class="font-bold text-green-700 ml-2">$${price.toFixed(2)}</span>` : '';
+                        return `<li class="ml-4 list-disc flex justify-between"><span>${fuel}</span>${priceText}</li>`;
+                    })
                     .join('');
 
                 const pop = `
@@ -350,7 +357,7 @@ export const MapComponent: React.FC<MapComponentProps> = ({
                 L.marker([station.latitude, station.longitude], { icon }).addTo(layer).bindPopup(pop, { maxWidth: 300 });
             }
         });
-    }, [oilStationData, language, t.fuelsAvailable, t.navigate]);
+    }, [oilStationData, oilPriceData, language, t.fuelsAvailable, t.navigate]);
 
     // Plot Turn Restrictions
     useEffect(() => {

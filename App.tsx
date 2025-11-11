@@ -13,7 +13,8 @@ import type {
     Language,
     VisibleLayers,
     OilStation,
-    ToiletFeature
+    ToiletFeature,
+    OilPriceData
 } from './types';
 import { 
     fetchCarparkData, 
@@ -27,6 +28,7 @@ import {
     fetchRoadNetworkData,
     fetchTrafficSpeedData,
     fetchOilStationsData,
+    fetchOilPriceData,
 } from './services/dataService';
 
 import { MapComponent } from './components/MapComponent';
@@ -35,6 +37,7 @@ import { LayerControl } from './components/LayerControl';
 import { InfoModal } from './components/InfoModal';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { Legend } from './components/Legend';
+import { OilPricePanel } from './components/OilPricePanel';
 import { i18n } from './constants';
 
 const TILE_FETCH_THRESHOLD = 0.1; // degrees. If bounds are larger, subdivide.
@@ -72,6 +75,7 @@ const App: React.FC = () => {
     const [roadNetworkData, setRoadNetworkData] = useState<RoadNetworkFeature[]>([]);
     const [trafficSpeedData, setTrafficSpeedData] = useState<TrafficSpeedInfo>({});
     const [oilStationData, setOilStationData] = useState<OilStation[]>([]);
+    const [oilPriceData, setOilPriceData] = useState<OilPriceData>(new Map());
     const [navigationTarget, setNavigationTarget] = useState<{lat: number, lon: number} | null>(null);
     const fetchedRoadsRef = useRef(new Set<string>());
     const isFetchingRoadsRef = useRef(false);
@@ -113,7 +117,8 @@ const App: React.FC = () => {
                 permits,
                 prohibitions,
                 trafficSpeeds,
-                oilStations
+                oilStations,
+                oilPrices
             ] = await Promise.all([
                 fetchCarparkData(language),
                 fetchAttractionsData(),
@@ -124,6 +129,7 @@ const App: React.FC = () => {
                 fetchProhibitionData(),
                 fetchTrafficSpeedData(),
                 fetchOilStationsData(language),
+                fetchOilPriceData(),
                 fetchInitialParkingMeterStatus() // Fetches and caches status
             ]);
 
@@ -136,6 +142,7 @@ const App: React.FC = () => {
             setProhibitionData(prohibitions);
             setTrafficSpeedData(trafficSpeeds);
             setOilStationData(oilStations);
+            setOilPriceData(oilPrices);
             
         } catch (error) {
             console.error("Failed to load initial data:", error);
@@ -271,6 +278,7 @@ const App: React.FC = () => {
                 onVisibilityChange={setVisibleLayers}
             />
             <Legend language={language} />
+            <OilPricePanel language={language} oilPriceData={oilPriceData} />
             
             <MapComponent
                 setMap={setMap}
@@ -286,6 +294,7 @@ const App: React.FC = () => {
                 roadNetworkData={roadNetworkData}
                 trafficSpeedData={trafficSpeedData}
                 oilStationData={oilStationData}
+                oilPriceData={oilPriceData}
                 onMarkerClick={handleMarkerClick}
                 navigationTarget={navigationTarget}
                 onNavigationStarted={handleNavigationStarted}

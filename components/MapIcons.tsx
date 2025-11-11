@@ -50,28 +50,10 @@ export const OilStationSVG = () => (
 );
 
 export const createOilStationIcon = (brand: string = '') => {
-    let bgColor = 'bg-gray-700';
-    let content: React.ReactElement = <OilStationSVG />;
-    const normalizedBrand = brand.toUpperCase();
-
-    if (normalizedBrand.includes('SHELL')) {
-        bgColor = 'bg-red-600';
-        content = <strong className="text-yellow-400 text-xl font-bold">S</strong>;
-    } else if (normalizedBrand.includes('ESSO')) {
-        bgColor = 'bg-blue-600';
-        content = <strong className="text-red-500 text-xl font-bold">E</strong>;
-    } else if (normalizedBrand.includes('CALTEX')) {
-        bgColor = 'bg-red-600';
-        content = <strong className="text-white text-xl font-bold">C</strong>;
-    } else if (normalizedBrand.includes('SINOPEC')) {
-        bgColor = 'bg-red-700';
-        content = <strong className="text-white text-lg font-bold">中</strong>;
-    } else if (normalizedBrand.includes('PETROCHINA')) {
-        bgColor = 'bg-yellow-400';
-        content = <strong className="text-red-600 text-xl font-bold">P</strong>;
-    }
+    const bgColor = 'bg-gray-700';
+    const content: React.ReactElement = <OilStationSVG />;
     
-    const className = `flex items-center justify-center ${bgColor} rounded-full border-2 border-white shadow-lg`;
+    const className = `flex items-center justify-center ${bgColor} rounded-full border-2 border-white shadow-lg p-1`;
     return createIcon(className, content, [28, 28]);
 };
 

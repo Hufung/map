@@ -1,0 +1,307 @@
+.hidden { display: none !important; }
+
+/* Custom class to prevent Leaflet from overriding icon styles */
+.leaflet-custom-icon-wrapper {
+    background: none !important;
+    border: none !important;
+}
+
+.leaflet-routing-container {
+    display: none;
+}
+
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+}
+.status-online { background-color: #10B981; }
+.status-offline { background-color: #EF4444; }
+.status-warning { background-color: #F59E0B; }
+
+/* =============================================
+   APPLE MAPS STYLE ICONS
+   ============================================= */
+
+/* Base Apple Maps Pin Style */
+.apple-map-pin {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 44px;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+    transition: transform 0.2s ease, filter 0.2s ease;
+    cursor: pointer;
+}
+
+.apple-map-pin:hover {
+    transform: scale(1.1) translateY(-2px);
+    filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.4));
+}
+
+.apple-map-pin .pin-body {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    background: linear-gradient(135deg, var(--pin-color-light) 0%, var(--pin-color) 50%, var(--pin-color-dark) 100%);
+    border: 2.5px solid rgba(255, 255, 255, 0.95);
+    box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.15), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+}
+
+.apple-map-pin .pin-icon {
+    position: relative;
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    margin-top: -10px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.apple-map-pin .pin-icon svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+/* Pin dot at bottom */
+.apple-map-pin::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 6px;
+    background: var(--pin-color-dark);
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Color Variants */
+.apple-map-pin.pin-blue {
+    --pin-color: #007AFF;
+    --pin-color-light: #4DA3FF;
+    --pin-color-dark: #0056B3;
+}
+
+.apple-map-pin.pin-green {
+    --pin-color: #34C759;
+    --pin-color-light: #5DD87A;
+    --pin-color-dark: #248A3D;
+}
+
+.apple-map-pin.pin-orange {
+    --pin-color: #FF9500;
+    --pin-color-light: #FFB340;
+    --pin-color-dark: #CC7700;
+}
+
+.apple-map-pin.pin-teal {
+    --pin-color: #5AC8FA;
+    --pin-color-light: #8ADBFB;
+    --pin-color-dark: #2BA3D6;
+}
+
+.apple-map-pin.pin-purple {
+    --pin-color: #AF52DE;
+    --pin-color-light: #C77DEB;
+    --pin-color-dark: #8944B3;
+}
+
+.apple-map-pin.pin-gray {
+    --pin-color: #636366;
+    --pin-color-light: #8E8E93;
+    --pin-color-dark: #48484A;
+}
+
+.apple-map-pin.pin-red {
+    --pin-color: #FF3B30;
+    --pin-color-light: #FF6961;
+    --pin-color-dark: #D32F2F;
+}
+
+.apple-map-pin.pin-yellow {
+    --pin-color: #FFCC00;
+    --pin-color-light: #FFD633;
+    --pin-color-dark: #C9A000;
+}
+
+.apple-map-pin.pin-cyan {
+    --pin-color: #32ADE6;
+    --pin-color-light: #5CC2EE;
+    --pin-color-dark: #2090C1;
+}
+
+.apple-map-pin.pin-sky {
+    --pin-color: #30B0C7;
+    --pin-color-light: #56C4D6;
+    --pin-color-dark: #238A9D;
+}
+
+/* Circular Badge Style (for special icons like toilets, turn restrictions) */
+.apple-map-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--badge-color-light) 0%, var(--badge-color) 100%);
+    border: 2.5px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+}
+
+.apple-map-badge:hover {
+    transform: scale(1.1);
+    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+.apple-map-badge.badge-sky {
+    --badge-color: #30B0C7;
+    --badge-color-light: #56C4D6;
+}
+
+.apple-map-badge.badge-red {
+    --badge-color: #FF3B30;
+    --badge-color-light: #FF6961;
+}
+
+.apple-map-badge.badge-slate {
+    --badge-color: #64748B;
+    --badge-color-light: #8899A6;
+}
+
+.apple-map-badge.badge-yellow {
+    --badge-color: #F59E0B;
+    --badge-color-light: #FBBF24;
+    color: #1F2937;
+}
+
+.apple-map-badge.badge-cyan {
+    --badge-color: #06B6D4;
+    --badge-color-light: #22D3EE;
+}
+
+.apple-map-badge.badge-rose {
+    --badge-color: #E11D48;
+    --badge-color-light: #F43F5E;
+}
+
+/* Small indicator badges (for permits, prohibitions) */
+.apple-map-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--indicator-color-light) 0%, var(--indicator-color) 100%);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+    cursor: pointer;
+}
+
+.apple-map-indicator:hover {
+    transform: scale(1.15);
+}
+
+.apple-map-indicator svg {
+    width: 14px;
+    height: 14px;
+    color: white;
+}
+
+.apple-map-indicator.indicator-orange {
+    --indicator-color: #FF9500;
+    --indicator-color-light: #FFB340;
+}
+
+.apple-map-indicator.indicator-red {
+    --indicator-color: #FF3B30;
+    --indicator-color-light: #FF6961;
+}
+
+/* User location marker */
+.user-location-marker {
+    width: 20px;
+    height: 20px;
+    background: #007AFF;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+    animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(0, 122, 255, 0.1), 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* Legacy support - redirect old classes */
+.map-icon-shadow {
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5));
+}
+.map-icon-shadow svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Sidebar Accordion */
+.accordion-item .accordion-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0.5rem;
+    background-color: #f9fafb; /* gray-50 */
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.accordion-item .accordion-header:hover {
+    background-color: #f3f4f6; /* gray-100 */
+}
+.accordion-item .accordion-header svg {
+    transition: transform 0.2s;
+}
+.accordion-item .accordion-header.active svg {
+    transform: rotate(180deg);
+}
+.accordion-item .accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+/* This class will be toggled by JS to open the content */
+.accordion-item .accordion-content.open {
+    max-height: 500px; /* Adjust as needed */
+    overflow-y: auto;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}

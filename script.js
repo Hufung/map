@@ -292,20 +292,27 @@ async function fetchWithCorsFallback(url, options = {}) {
         lastError = new Error(`HTTP ${response.status}`);
     } catch (e) {
         lastError = e;
+        // console.log('Direct fetch failed, trying proxies...');
     }
     
     // Try through proxies
     for (const proxy of CORS_PROXIES) {
         try {
             const proxyUrl = proxy + encodeURIComponent(url);
+            console.log('Trying proxy:', proxy);
             const response = await fetch(proxyUrl, options);
-            if (response.ok) return response;
+            if (response.ok) {
+                console.log('Proxy succeeded:', proxy);
+                return response;
+            }
         } catch (e) {
+            console.log('Proxy failed:', proxy, e.message);
             lastError = e;
             continue;
         }
     }
     
+    console.warn('All fetch attempts failed for:', url);
     throw lastError || new Error('All fetch attempts failed');
 }
 
@@ -722,10 +729,42 @@ async function fetchOilStationsData(language) {
 async function fetchOilPriceData() {
     try {
         updateApiProgress(70, 'Loading fuel prices...');
-        const response = await fetchWithRetry(API_OIL_PRICES_URL);
-        if (!response.ok) throw new Error('Failed to fetch oil price data.');
+        
+        // Try multiple proxy approaches for consumer.org.hk
+        let response = null;
+        let lastError = null;
+        
+        for (const proxy of CORS_PROXIES) {
+            try {
+                const proxyUrl = proxy + encodeURIComponent(API_OIL_PRICES_URL);
+                console.log('Trying oil price proxy:', proxy);
+                response = await fetch(proxyUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    console.log('Oil price proxy succeeded:', proxy);
+                    break;
+                }
+            } catch (error) {
+                console.log('Oil price proxy failed:', proxy, error.message);
+                lastError = error;
+                response = null;
+                continue;
+            }
+        }
+        
+        if (!response || !response.ok) {
+            throw lastError || new Error('All oil price proxy attempts failed');
+        }
+        
         const data = await response.json();
         const priceMap = new Map();
+        
         if (Array.isArray(data)) {
             data.forEach(fuelData => {
                 const fuelTypeEn = fuelData.type?.en;
@@ -744,11 +783,17 @@ async function fetchOilPriceData() {
                 }
             });
         }
+        
         updateApiStatus('oilPrices', 'online');
+        console.log('Successfully loaded oil price data:', priceMap.size, 'companies');
         return priceMap;
+        
     } catch (error) { 
         console.error("Error fetching oil price data:", error);
         updateApiStatus('oilPrices', 'offline');
+        
+        // Return empty map but don't break the app
+        console.warn('Oil price data unavailable - continuing without fuel prices');
         return new Map(); 
     }
 }
@@ -1030,8 +1075,14 @@ function renderLegend() {
 
 function renderOilPricePanel() {
     const t = i18n[appState.language];
+    
     if (!appState.oilPriceData || appState.oilPriceData.size === 0) {
-        oilPriceContainer.innerHTML = '';
+        oilPriceContainer.innerHTML = `
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+                <div class="text-yellow-800 text-sm font-medium mb-1">Fuel Price Data Unavailable</div>
+                <div class="text-yellow-600 text-xs">Unable to load current fuel prices from data source</div>
+            </div>
+        `;
         return;
     }
 
@@ -1067,10 +1118,18 @@ function renderOilPricePanel() {
         `;
     }).filter(Boolean).join('');
 
-    oilPriceContainer.innerHTML = `
-        <div class="space-y-2 max-h-[50vh] overflow-y-auto">
-            ${cards}
-        </div>`;
+    if (cards) {
+        oilPriceContainer.innerHTML = `
+            <div class="space-y-2 max-h-[50vh] overflow-y-auto">
+                ${cards}
+            </div>`;
+    } else {
+        oilPriceContainer.innerHTML = `
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
+                <div class="text-gray-600 text-sm">No fuel price data available</div>
+            </div>
+        `;
+    }
 }
 
 function renderInfoModal(carpark) {
@@ -1203,7 +1262,7 @@ function updateRoadStyles() {
 
 function plotRoadNetwork() {
     const layer = appState.layers.trafficSpeed;
-    if (!layer || !appState.map) return;
+    if (!layer || !appState.map || !appState.visibleLayers.trafficSpeed) return;
     
     const newFeatures = appState.roadNetworkData.filter(feature =>
         feature.properties?.ROUTE_ID && !appState.roadLayers.has(String(feature.properties.ROUTE_ID))
@@ -1234,7 +1293,7 @@ function plotRoadNetwork() {
         line.bindPopup(popupContent);
 
         appState.roadLayers.set(routeId, line);
-        if (appState.map.hasLayer(layer)) line.addTo(layer);
+        line.addTo(layer);
     });
 }
 
@@ -1525,7 +1584,7 @@ function handleLayerToggle(e) {
 }
 
 async function handleMapViewChange() {
-    if (appState.isFetchingRoads) return;
+    if (appState.isFetchingRoads || !appState.visibleLayers.trafficSpeed) return;
     
     // Fetch genuine retailers if layer is visible
     if (appState.visibleLayers.genuineRetailers && appState.map) {
@@ -1811,7 +1870,7 @@ async function init() {
 
     await loadInitialData();
     
-    // Set up traffic speed refresh interval
+    // Set up traffic speed refresh interval (30 seconds)
     setInterval(async () => {
         try {
             appState.trafficSpeedData = await fetchTrafficSpeedData();
@@ -1819,7 +1878,7 @@ async function init() {
         } catch (error) { 
             console.error("Failed to refresh traffic speed data:", error); 
         }
-    }, 60000);
+    }, 30000);
 }
 
 

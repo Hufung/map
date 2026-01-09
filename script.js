@@ -31,6 +31,7 @@ const appState = {
     retailerCategories: new Set(),
     selectedRetailerCategories: new Set(),
     retailerData: [],
+    dloBoundaryData: [],
 
     searchQuery: '',
     visibleLayers: {
@@ -38,7 +39,7 @@ const appState = {
         evChargers: false, parkingMeters: false, oilStations: true,
         permits: true, prohibitions: true, trafficSpeed: false,
         turnRestrictions: false, trafficFeatures: false, toilets: false,
-        genuineRetailers: false, placeNames: true,
+        genuineRetailers: false, placeNames: true, dloBoundary: true,
     },
     layers: {},
     roadLayers: new Map(),
@@ -85,6 +86,7 @@ const API_OIL_STATIONS_URL = 'https://hufung.github.io/data/stations.csv';
 const API_OIL_PRICES_URL = 'https://www.consumer.org.hk/pricewatch/oilwatch/opendata/oilprice.json';
 const API_TOILETS_FEHD_URL = 'https://portal.csdi.gov.hk/server/services/common/fehd_rcd_1629969687926_30590/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=FEHD_FACI&outputFormat=geojson';
 const API_TOILETS_AFCD_URL = 'https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635136427551_29173/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Toilets&outputFormat=geojson';
+const API_DLO_BOUNDARY_URL = 'https://portal.csdi.gov.hk/server/services/common/landsd_rcd_1631604711900_51558/MapServer/WFSServer?service=wfs&request=GetFeature&outputFormat=GEOJSON&typename=DLOBoundary';
 const API_GENUINE_RETAILERS_URL = 'https://portal.csdi.gov.hk/server/services/common/ipd_rcd_1728898210576_79568/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=geotagging&outputFormat=geojson&srsName=EPSG:4326';
 
 
@@ -280,6 +282,20 @@ const sidebarToggleClose = document.getElementById('sidebar-toggle-close');
 // -------------------------------------------------
 // 3. HELPER & UTILITY FUNCTIONS
 // -------------------------------------------------
+
+// Point-in-polygon algorithm
+function isPointInPolygon(point, polygon) {
+    const [x, y] = point;
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [xi, yi] = polygon[i];
+        const [xj, yj] = polygon[j];
+        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
 
 // Improved CORS handling with fallback
 async function fetchWithCorsFallback(url, options = {}) {
@@ -972,6 +988,7 @@ function updateLanguageUI() {
     // Update place names layer language
     if (appState.layers.placeNames) {
         const lang = appState.language === 'en_US' ? 'en' : 'tc';
+        console.log(appState.layers.placeNames);
         const wasVisible = appState.map.hasLayer(appState.layers.placeNames);
         if (wasVisible) appState.map.removeLayer(appState.layers.placeNames);
         appState.layers.placeNames = L.tileLayer(`https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/${lang}/WGS84/{z}/{x}/{y}.png`, {
@@ -980,6 +997,7 @@ function updateLanguageUI() {
             opacity: 1
         });
         if (wasVisible) appState.map.addLayer(appState.layers.placeNames);
+        const v = appState.map.hasLayer(appState.layers.placeNames);
     }
     
     // Update Layer Control Labels & Legend
@@ -1544,6 +1562,70 @@ function handleClearSearch() {
 //     });
 // }
 
+function plotDLOBoundary() {
+    const layer = appState.layers.dloBoundary;
+    if (!layer || !appState.dloBoundaryData) return;
+    layer.clearLayers();
+    
+    appState.dloBoundaryData.forEach(feature => {
+        if (feature.geometry) {
+            const geoJsonLayer = L.geoJSON(feature, {
+                style: {
+                    color: '#000000',
+                    weight: 2,
+                    opacity: 0.9,
+                    fillColor: '#000000',
+                    fillOpacity: 0.5
+                }
+            }).addTo(layer);
+            
+            // Store reference for opacity control
+            feature.geoJsonLayer = geoJsonLayer;
+        }
+    });
+    
+    // Add landmark pin with Apple Maps style and star icon
+    const starIconSVG = `<svg fill="white" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
+    const landmarkIcon = L.divIcon({
+        html: `
+            <div class="apple-map-pin pin-red">
+                <div class="pin-body"></div>
+                <div class="pin-icon">${starIconSVG}</div>
+            </div>
+        `,
+        className: 'leaflet-custom-icon-wrapper',
+        iconSize: [34, 44],
+        iconAnchor: [17, 44],
+        popupAnchor: [0, -44]
+    });
+    
+    L.marker([22.381600850401114, 114.2741535913527], { icon: landmarkIcon })
+        .addTo(layer)
+        .on('click', () => {
+            const pinPoint = [114.2741535913527, 22.381600850401114]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+}
+
 function plotPlaceNames() {
     const layer = appState.layers.placeNames;
     if (!layer || !appState.map) return;
@@ -1741,7 +1823,6 @@ function renderRetailerCategoryFilter() {
 // -------------------------------------------------
 // 9. INITIALIZATION
 // -------------------------------------------------
-
 async function init() {
     const t = i18n[appState.language];
     updateLoadingSpinner(true, t.initialLoadMessage);
@@ -1771,7 +1852,6 @@ async function init() {
     appState.layers.routeTurnRestrictions = L.layerGroup();
     
     updateAllMapLayers(); // Add initially visible layers
-
     // Attach event listeners with null checks
     if (searchForm) {
         searchForm.addEventListener('submit', handleSearch);
@@ -1898,7 +1978,7 @@ async function loadInitialData() {
             fetchOilStationsData(appState.language),
             fetchOilPriceData(),
             fetchInitialParkingMeterStatus(),
-            Promise.resolve([])
+            fetchGeoJSONData(API_DLO_BOUNDARY_URL),
         ];
 
         const results = await Promise.allSettled(promises);
@@ -1907,7 +1987,7 @@ async function loadInitialData() {
         const [
             carparks, attractions, viewingPoints, evChargers,
             turnRestrictions, permits, prohibitions, trafficSpeeds,
-            oilStations, oilPrices, placeNames
+            oilStations, oilPrices, placeNames, dloBoundary
         ] = results.map((result, index) => {
             if (result.status === 'fulfilled') {
                 updateApiProgress(10 + (index * 8), `Loaded data source ${index + 1}/${promises.length}`);
@@ -1929,11 +2009,13 @@ async function loadInitialData() {
         appState.trafficSpeedData = trafficSpeeds || {};
         appState.oilStationData = oilStations || [];
         appState.oilPriceData = oilPrices || new Map();
+        appState.dloBoundaryData = dloBoundary || [];
 
 
         // Update UI
         plotCarparks();
         updateAllStaticLayers();
+        plotDLOBoundary();
         renderOilPricePanel();
 
         // Show success message
